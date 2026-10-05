@@ -45,10 +45,9 @@ def run(tmp_path, monkeypatch, capsys):
 def test_empty_cache_says_import_state_and_no_pointer_failure(run):
     go, tmp = run
     rc, out, calls = go()
-    assert "run: superclef import-state --from-superjev" in out
-    assert "or reconnect" in out
+    assert "run: superclef connect <folder>" in out
     assert ask._RESULT["outcome"] == "needs-setup" and ask._RESULT["next"] == "refresh"
-    assert ask._RESULT["cmd"] == "superclef import-state --from-superjev"
+    assert ask._RESULT["cmd"] == "superclef connect <folder>"
     assert [r["state"] for r in ask._RESULT["unsearched"]] == ["unprepared"]
     assert not ask._RESULT["errors"]
     assert "navigate" not in calls
