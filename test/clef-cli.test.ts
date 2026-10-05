@@ -36,10 +36,14 @@ test('superclef --help leads with its own usage and names the clef judge nowhere
   assert.ok(!/superjev/i.test(r.stdout.replace(/super-jev/g, '')), r.stdout);
 });
 
-test('import-state without --from-superjev is a usage error, not a copy', () => {
-  const r = run('import-state');
-  assert.equal(r.status, 2);
-  assert.match(r.stderr, /Usage: superclef import-state --from-superjev/);
+test('connect and disconnect without a folder or name are usage errors that say what to type', () => {
+  const c = run('connect');
+  assert.equal(c.status, 2);
+  assert.match(c.stderr, /Usage: superclef connect <folder>/);
+  const d = run('disconnect');
+  assert.equal(d.status, 2);
+  assert.match(d.stderr, /Usage: superclef disconnect <name>/);
+  assert.equal(run('import-state', '--from-superjev').status === 0, false, 'import-state is gone');
 });
 
 test('the default judge is clef: keyless, free, one short package', () => {
@@ -63,5 +67,5 @@ test("Super Clef never defaults to Super Jev's state or install folders", () => 
     }
   };
   for (const d of ['src', 'skills', 'bin', 'scripts']) walk(join(ROOT, d));
-  assert.deepEqual(hits.filter((h) => !h.endsWith('import_state.py')), [], 'only import-state may name Super Jev\'s state, and only to read it');
+  assert.deepEqual(hits, [], 'nothing names Super Jev\'s state folder');
 });

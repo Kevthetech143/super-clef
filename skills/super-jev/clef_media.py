@@ -3,6 +3,7 @@
 
     superclef media connect <file-or-folder>...   record png/jpg/webp/mp4/mov files (path, sha256, size, hint words); no text index
     superclef media list
+    superclef media remove <name-or-path>         forget one connected file (its pointer only; the file is not touched)
     superclef media ask "question" [--top N] [--json]
 
 connect keeps only a pointer: sha, size, kind and a few hint words (file name, folder names, a same-name .txt/.md
@@ -85,6 +86,23 @@ def load():
         return json.load(open(state_file()))
     except (OSError, ValueError):
         return {}
+
+
+def remove(target):
+    """Forget one connected file by full path, or by file name when only one connected file has it.
+    (removed path, None), or (None, why)."""
+    reg = load()
+    hit = [p for p in reg if p == target or p == os.path.abspath(os.path.expanduser(target))]
+    if not hit:
+        hit = [p for p in reg if os.path.basename(p) == target]
+    if not hit:
+        return None, f"no connected image or video matches '{target}'. See: superclef media list"
+    if len(hit) > 1:
+        return None, f"'{target}' matches {len(hit)} files; give the full path:\n  " + "\n  ".join(sorted(hit))
+    del reg[hit[0]]
+    with open(state_file(), "w") as fh:
+        json.dump(reg, fh)
+    return hit[0], None
 
 
 def words(text):
@@ -203,12 +221,20 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("connect"); c.add_argument("paths", nargs="+")
     sub.add_parser("list")
+    rm = sub.add_parser("remove"); rm.add_argument("target")
     a = sub.add_parser("ask"); a.add_argument("question"); a.add_argument("--top", type=int, default=TOP); a.add_argument("--json", action="store_true")
     ns = ap.parse_args(argv)
     if ns.cmd == "connect":
         added = connect(ns.paths)
         print(f"connected {len(added)} image/video file(s) (pointers only: sha, size, hint words)")
         return 0 if added else 1
+    if ns.cmd == "remove":
+        gone, why = remove(ns.target)
+        if why:
+            print(why, file=sys.stderr)
+            return 1
+        print(f"removed {gone} (only the pointer; the file itself was not touched)")
+        return 0
     if ns.cmd == "list":
         for p, m in sorted(load().items()):
             print(f"{m['kind']:5} {m['size']:>9} {m['sha256'][:10]} {p}")

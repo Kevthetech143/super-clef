@@ -73,3 +73,12 @@ def test_unreachable_is_an_error_not_a_not_found(env, monkeypatch):
     clef_media.connect([os.path.dirname(env["red_triangle"])])
     monkeypatch.setattr(clef_media, "transport", lambda b, t: ("", "ssh: connect failed", 255))
     assert clef_media.ask("anything")["outcome"] == "error"
+
+
+def test_remove_forgets_one_file_by_name_and_keeps_the_file(env):
+    clef_media.connect([os.path.dirname(env["red_triangle"])])
+    gone, why = clef_media.remove(os.path.basename(env["red_triangle"]))
+    assert why is None and gone == env["red_triangle"]
+    assert env["red_triangle"] not in clef_media.load() and len(clef_media.load()) == 4
+    assert os.path.exists(env["red_triangle"])
+    assert clef_media.main(["remove", "nothing-like-this.png"]) == 1

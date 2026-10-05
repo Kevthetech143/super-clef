@@ -1854,6 +1854,8 @@ def main() -> int:
                     help="mark the pointer watched: every new file and subfolder under its folders is taken in on later "
                          "asks. Refused when a pointer inside serves agents it does not (--principal: its own)")
     ap.add_argument("--unwatch", action="store_true", help="clear the watched mark (--principal: the pointer's own)")
+    ap.add_argument("--disconnect", action="store_true",
+                    help="forget the connected set --pointer NAME (pointer, registry row, prepare-cache files); originals untouched")
     ap.add_argument("--shareable", action="store_true",
                     help="mark this connection shareable with other agents (default private); a person's decision")
     ap.add_argument("--no-shared", action="store_true",
@@ -1871,8 +1873,50 @@ def main() -> int:
     return run_json(a) if a.json else run(a)
 
 
+def disconnect_cmd(a) -> int:
+    """--disconnect: forget a connected set. Removes its pointer (the engine's remove), its registry row(s), its
+    prepared copy under the state dir and its prepare-cache files, parts included. Original files are never touched."""
+    name = a.pointer
+    if not name:
+        return refuse("usage", "--disconnect needs --pointer NAME")
+    reg_path = Path(os.environ.get("SUPERJEV_STATE_DIR") or Path.home() / ".local/state/super-clef").expanduser() / "_memory" / "registry.json"
+    try:
+        reg = json.loads(reg_path.read_text())
+    except (OSError, ValueError):
+        reg = {"version": 1, "datasets": {}}
+    part = re.compile(rf"^{re.escape(name)}(-\d+)?$")
+    cache_re = re.compile(rf"^{re.escape(name)}(-\d+)?(-report\.json|-held\.txt|\.json)$")
+    names = {n for n in reg.get("datasets", {}) if part.match(n)}
+    files = [p for p in (CACHE_DIR.iterdir() if CACHE_DIR.is_dir() else []) if cache_re.match(p.name)]
+    if not names and not files:
+        print(f"{name} is not connected. Nothing to remove.")
+        return 1
+    names.add(name)
+    for n in sorted(names):
+        got = memory({"action": "remove", "pointer": n})
+        if got.get("status") != "removed":
+            print(f"could not remove the pointer {n}: {got.get('message') or got.get('reason') or 'the engine did not answer'}. Nothing else was changed.")
+            return 1
+    base = reg_path.parent.resolve()
+    for n in sorted(names):
+        row = reg.get("datasets", {}).pop(n, None) or {}
+        man = Path(row.get("manifestPath") or "/")
+        if man.name == "manifest.json" and man.parent.name.startswith(".prepared-") and man.parent.parent.resolve() == base:
+            shutil.rmtree(man.parent, ignore_errors=True)
+    tmp = reg_path.with_name(reg_path.name + ".tmp")
+    if reg_path.is_file():
+        tmp.write_text(json.dumps(reg, indent=2) + "\n")
+        os.replace(tmp, reg_path)
+    for p in files:
+        p.unlink(missing_ok=True)
+    print(f"disconnected {name} ({len(names)} set(s), {len(files)} cache file(s) removed). Your original files were not touched.")
+    return 0
+
+
 def run(a) -> int:
     """One connect (or --list) as text mode prints it; --json reads the same rows."""
+    if a.disconnect:
+        return disconnect_cmd(a)
     if a.json and a.list:
         return refuse("usage", "--json covers a connect only; --list prints its own table")
     if a.list:

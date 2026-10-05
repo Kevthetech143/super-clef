@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // npm run e2e:clef -- the live end-to-end check of Super Clef's judge.
-//  1. superclef import-state --from-superjev   (Super Clef gets the same connected files; read-only copy)
+//  1. (nothing to import: connect your own folder first with `superclef connect <folder>`)
 //  2. asks 2 questions from your eval jsonl file through the clef judge on the clef machine, live (saved answers off):
 //     the first answerable one and the first absent one
 //  3. asserts each is a ranked list or an honest not-found (the absent one never lists a confirmed file), that the answerable one really reached clef,
 //     and that no payload is left on the clef machine
 //  4. prints the time of each question and the total
-// Needs: the clef machine reachable over ssh (SUPERJEV_CLEF_HOST), Super Jev connected on this Mac, the eval file.
+// Needs: the clef machine reachable over ssh (SUPERJEV_CLEF_HOST), a folder connected with `superclef connect <folder>`, the eval file.
 // Override: EVALSET=/path/to/file.jsonl, SUPERJEV_CLEF_HOST=user@host. Exit 0 only when every assertion holds.
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -24,8 +24,6 @@ const fails = [];
 const check = (ok, what) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${what}`); if (!ok) fails.push(what); };
 
 const t0 = Date.now();
-const imp = spawnSync('node', [join(ROOT, 'bin/superclef.js'), 'import-state', '--from-superjev', '--json'], { encoding: 'utf8' });
-check(imp.status === 0, `import-state --from-superjev (${imp.status === 0 ? JSON.parse(imp.stdout).datasets + ' datasets' : imp.stderr.trim()})`);
 
 const rows = readFileSync(EVALSET, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 const picks = [rows.find((r) => !r.absent), rows.find((r) => r.absent)];

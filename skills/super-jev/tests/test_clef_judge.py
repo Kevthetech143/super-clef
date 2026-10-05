@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """Super Clef's judge: the clef profile, the ssh client (with a stub in place of the clef machine), the short-package
-confirm step in ask.py, and import-state. No network, no clef machine, no key: every judge reply here is a stub.
+confirm step in ask.py. No network, no clef machine, no key: every judge reply here is a stub.
 
     python3 -m pytest skills/super-jev/tests/test_clef_judge.py -q
 """
-import hashlib
 import json
 import os
-import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -20,7 +18,6 @@ import judge_profile  # noqa: E402
 import judges  # noqa: E402
 import clef_client  # noqa: E402
 import ask  # noqa: E402
-import import_state  # noqa: E402
 
 CLEF = judge_profile.load("clef")
 
@@ -264,69 +261,3 @@ def test_a_claim_is_not_judged_in_the_confirm_step(clef, tmp_path, monkeypatch):
     monkeypatch.setattr(judges, "ask", lambda *a, **k: pytest.fail("no judge call in the claim confirm step"))
     scores, _, err, notes = ask.clef_confirm("the ENT phone is 212-555-0100", fs)
     assert scores == {} and err is None and notes == {}
-
-
-# ----------------------------------------------------------------------------------------- import-state
-def _jev_state(tmp_path):
-    jev = tmp_path / "jev-state"
-    mem = tmp_path / "jev-mem"
-    mem.mkdir(parents=True)
-    (jev / "primary").mkdir(parents=True)
-    (jev / "primary" / "approvals.jsonl").write_text('{"q":"saved"}\n')
-    (jev / "abs-t01-r1-abc").mkdir()
-    (jev / "abs-t01-r1-abc" / "approvals.jsonl").write_text("benchmark\n")
-    (jev / "shared-pointers.json").write_text('{"pointers":["a"]}')
-    db = sqlite3.connect(mem / "answers.sqlite")
-    db.execute("create table pointers(name text primary key, body text not null)")
-    db.execute("insert into pointers values('notes','{}')")
-    db.commit(); db.close()
-    originals = [{"path": "/x/one.md", "sha256": "a" * 64}]
-    reg = {"version": 1, "datasets": {
-        "notes": {"structure": "flat-files", "manifestPath": "/m", "manifestSHA256": "b" * 64, "originals": originals},
-        "notes-2": {"structure": "flat-files", "manifestPath": "/m2", "manifestSHA256": "c" * 64, "originals": originals},
-        "view": {"manifestPath": "/m3", "manifestSHA256": "d" * 64, "originals": originals}}}
-    (mem / "registry.json").write_text(json.dumps(reg))
-    (mem / "config.json").write_text(json.dumps({"db": "answers.sqlite", "registry": "registry.json", "reviewTtlSeconds": 600,
-                                                  "retrievalCommand": ["python3", "/jev/provider_bridge.py"],
-                                                  "navigationCommand": ["python3", "/jev/navigation_provider.py"]}))
-    skill = tmp_path / "jev-skill"
-    (skill / "prepare-cache").mkdir(parents=True)
-    (skill / "prepare-cache" / "notes.json").write_text('{"/x/one.md": {"sha256": "' + "a" * 64 + '", "pass": true}}')
-    return jev, mem / "config.json", skill
-
-
-def _tree_hash(root):
-    h = hashlib.sha256()
-    for p in sorted(Path(root).rglob("*")):
-        if p.is_file():
-            h.update(str(p.relative_to(root)).encode() + p.read_bytes())
-    return h.hexdigest()
-
-
-def test_import_state_copies_the_connected_sets_and_never_writes_super_jev(tmp_path, monkeypatch):
-    jev, cfg, skill = _jev_state(tmp_path)
-    dst = tmp_path / "clef-state"
-    monkeypatch.setenv("SUPERJEV_STATE_DIR", str(dst))
-    monkeypatch.setattr(import_state, "HERE", tmp_path / "clef-skill")
-    (tmp_path / "clef-skill").mkdir()
-    before = (_tree_hash(jev), _tree_hash(cfg.parent), _tree_hash(skill))
-    assert import_state.main(["--from-superjev", "--state", str(jev), "--config", str(cfg), "--skill-dir", str(skill), "--json"]) == 0
-    assert (_tree_hash(jev), _tree_hash(cfg.parent), _tree_hash(skill)) == before, "Super Jev's files were touched"
-    new = json.loads((dst / "_memory" / "config.json").read_text())
-    assert new["db"] == str(dst / "_memory" / "answers.sqlite") and new["registry"] == str(dst / "_memory" / "registry.json")
-    assert "provider_bridge" not in json.dumps(new) and new["reviewTtlSeconds"] == 600
-    assert sqlite3.connect(new["db"]).execute("select name from pointers").fetchall() == [("notes",)]
-    assert json.loads(Path(new["registry"]).read_text())["datasets"].keys() == {"notes", "notes-2", "view"}
-    assert (dst / "primary" / "approvals.jsonl").is_file() and not (dst / "abs-t01-r1-abc").exists()
-    assert (dst / "shared-pointers.json").is_file()
-    cache = dst / "prepare-cache"  # the cache lives in the state dir, not the release checkout
-    assert (cache / "notes.json").is_file()
-    made = json.loads((cache / "notes-2.json").read_text())  # a split part's file list, from the registry's originals
-    assert made["/x/one.md"]["pass"] is True and made["/x/one.md"]["sha256"] == "a" * 64
-    assert not (cache / "view.json").exists(), "a reviewed view is never given its raw originals"
-
-
-def test_import_state_refuses_to_copy_a_folder_onto_itself(tmp_path, monkeypatch, capsys):
-    jev, cfg, skill = _jev_state(tmp_path)
-    monkeypatch.setenv("SUPERJEV_STATE_DIR", str(jev))
-    assert import_state.main(["--from-superjev", "--state", str(jev), "--config", str(cfg)]) == 2
