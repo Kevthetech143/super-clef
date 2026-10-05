@@ -52,7 +52,7 @@ def _setup(tmp_path, monkeypatch, pointers, navigate, scores=None):
     monkeypatch.setattr(ask, "batch_jev", lambda: False)
     monkeypatch.setattr(ah, "reconnect_now", lambda ptr, principal, timeout=None: "no-report")
     monkeypatch.setattr(ah, "reconnect_recipe", lambda ptr, principal, memory=None: "no-recipe")
-    monkeypatch.setattr(ah, "maybe_heal", lambda *a, **k: "no-report")
+    monkeypatch.setattr(ah, "heal_in_background_many", lambda ptrs, principal, views=(): {p: "no-recipe" for p in ptrs})
     monkeypatch.setattr(ah, "maybe_scan", lambda *a, **k: None)
     monkeypatch.setattr(ask, "confirm", lambda q, ps: (dict(scores or {}), set(), None, {}))
 

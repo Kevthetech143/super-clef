@@ -302,3 +302,15 @@ def test_unexpected_file_prevents_generation_deletion(setup, monkeypatch):
     assert result['status'] == 'registered'
     assert unexpected.read_text() == 'Keep this operator artifact'
     assert result['cleanupWarnings']
+
+
+def test_recipes_reads_every_pointer_in_one_call(setup):
+    import cli
+    _, config, req = setup
+    assert connect(confirm(req, config), config)['status'] == 'registered'
+    cfg = Path(config['db']).with_name('recipes-config.json')
+    cfg.write_text(json.dumps({'db': config['db'], 'registry': config['registry']}))
+    got = cli.handle({'action': 'recipes', 'pointers': ['notes', 'ghost'], 'principal': 'owner'}, cfg)
+    assert got['status'] == 'ok' and got['recipes']['notes']['status'] == 'ok'
+    assert got['recipes']['notes']['recipe']['pointer'] == 'notes'
+    assert got['recipes']['ghost']['status'] == 'unknown-pointer'

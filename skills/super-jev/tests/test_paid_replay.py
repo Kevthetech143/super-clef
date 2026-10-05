@@ -379,7 +379,7 @@ def test_ask_in_replay_mode_never_reconnects_or_heals_a_stale_pointer(tmp_path, 
     monkeypatch.setattr(ask, "confirm", lambda q, ps: ({}, set(), None, {}))
     monkeypatch.setattr(ask.auto_heal, "reconnect_now", lambda *a, **k: pytest.fail("reconnect in a replay"))
     monkeypatch.setattr(ask.auto_heal, "reconnect_recipe", lambda *a, **k: pytest.fail("reconnect in a replay"))
-    monkeypatch.setattr(ask.auto_heal, "maybe_heal", lambda *a, **k: pytest.fail("auto-heal in a replay"))
+    monkeypatch.setattr(ask.auto_heal, "heal_in_background_many", lambda *a, **k: pytest.fail("auto-heal in a replay"))
     ask.lookup("what is pending", "hf", tmp_path / "s")
 
 

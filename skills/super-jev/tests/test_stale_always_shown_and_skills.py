@@ -37,7 +37,7 @@ def _stuck(tmp_path, monkeypatch, status="preparation-required"):
     monkeypatch.setattr(ask, "load_cache_files", lambda ptr: {})
     monkeypatch.setattr(ah, "reconnect_now", lambda ptr, principal, timeout=None: "no-report")
     monkeypatch.setattr(ah, "reconnect_recipe", lambda ptr, principal, memory=None: "no-recipe")
-    monkeypatch.setattr(ah, "maybe_heal", lambda *a, **k: "no-report")
+    monkeypatch.setattr(ah, "heal_in_background_many", lambda ptrs, principal, views=(): {p: "no-recipe" for p in ptrs})
     monkeypatch.setattr(ask, "confirm", lambda q, ps: ({}, set(), None, {}))
 
 
@@ -56,7 +56,7 @@ def test_a_stuck_stale_pointer_shows_on_every_answer(tmp_path, monkeypatch, caps
 
 def test_a_stale_pointer_that_is_healing_still_shows_every_time(tmp_path, monkeypatch, capsys):
     _stuck(tmp_path, monkeypatch)
-    monkeypatch.setattr(ah, "maybe_heal", lambda *a, **k: "started")
+    monkeypatch.setattr(ah, "heal_in_background_many", lambda ptrs, principal, views=(): {p: "started" for p in ptrs})
     for _ in range(2):
         ask.lookup("what is pending", "primary", tmp_path / "s")
         assert "refreshing in the background; ask again in a minute" in capsys.readouterr().out

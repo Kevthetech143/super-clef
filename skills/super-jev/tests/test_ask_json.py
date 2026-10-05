@@ -77,7 +77,7 @@ def world(tmp_path, monkeypatch, pointers=("notes",), navigate=None, scores=None
     monkeypatch.setattr(ask, "batch_jev", lambda: False)
     monkeypatch.setattr(ah, "reconnect_now", lambda ptr, principal, timeout=None: "no-report")
     monkeypatch.setattr(ah, "reconnect_recipe", lambda ptr, principal, memory=None: "no-recipe")
-    monkeypatch.setattr(ah, "maybe_heal", lambda *a, **k: heal)
+    monkeypatch.setattr(ah, "heal_in_background_many", lambda ptrs, principal, views=(): {p: heal for p in ptrs})
     monkeypatch.setattr(ah, "maybe_scan", lambda *a, **k: None)
 
     def confirm(q, paths):

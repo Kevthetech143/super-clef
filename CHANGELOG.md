@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **`ask` hands all its stale sets to the heal side in one call** (`heal_in_background_many`): one state-lock step, at most one engine read (new `recipes` action) and at most one background drain per ask, however many sets are stale. It was one call each, about 1.4 s per stale set. Statuses and honest wording are unchanged (only a real start says refreshing); a failed recipe replay now says the last refresh failed instead of cooling down.
 - **File index (on by default; `SUPERCLEF_INDEX=0` turns it off).** Ported from Super Jev: a per-principal `index.sqlite` (SQLite WAL, FTS5 passages) built by a detached updater after a connect or refresh, and after an ask at most every 10 minutes. An ask takes the best 200 files by bm25 on the question's words and on the table-of-contents words from the index, re-scores only those, and sha-checks only the files it serves, instead of loading the whole word-index JSON, matching close spellings with difflib and scanning every file. A set the index does not hold completely and currently (not yet built, stale, older generation) is searched the old way in the same ask; a busy, missing or damaged index falls back the same way and never loses an answer. One updater per principal (flock). The engine config key `"indexRead": false` also turns it off.
 
 ## 0.3.1

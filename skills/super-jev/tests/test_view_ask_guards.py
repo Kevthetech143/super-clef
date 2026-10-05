@@ -50,8 +50,8 @@ def test_lookup_never_reads_an_old_raw_bulk_cache(tmp_path, monkeypatch):
 def test_stale_view_only_attempts_its_recipe_not_old_bulk_report(tmp_path, monkeypatch):
     _, _ = setup(tmp_path, monkeypatch, stale=True)
     recipes = []
-    monkeypatch.setattr(ask.auto_heal, 'heal_in_background',
-                        lambda ptr, principal, view=False: recipes.append((ptr, view)) or 'started')
+    monkeypatch.setattr(ask.auto_heal, 'heal_in_background_many',
+                        lambda ptrs, principal, views=(): recipes.extend((p, p in views) for p in ptrs) or {p: 'started' for p in ptrs})
     ask.lookup('Project public notes', 'owner', tmp_path / 'state/owner')
     assert recipes == [('notes', True)]  # the recipe, started in the background; never the old bulk report
 
