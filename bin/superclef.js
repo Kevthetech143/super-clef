@@ -45,6 +45,9 @@ if (argv[0] === '--version' || argv[0] === '-v' || argv[0] === 'version') {
     const r = spawnSync('python3', [join(SKILL, 'prepare_bulk.py'), '--disconnect', '--pointer', argv[1]], { stdio: 'inherit' });
     process.exitCode = r.status ?? 1;
   }
+} else if (argv[0] === 'import-state') {
+  console.error('import-state was removed. Connect your folder with: superclef connect <folder>');
+  process.exitCode = 2;
 } else if (argv[0] === 'media') {
   const r = spawnSync('python3', [join(SKILL, 'clef_media.py'), ...argv.slice(1)], { stdio: 'inherit' });
   process.exitCode = r.status ?? 1;

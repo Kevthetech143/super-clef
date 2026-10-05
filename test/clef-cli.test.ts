@@ -43,7 +43,9 @@ test('connect and disconnect without a folder or name are usage errors that say 
   const d = run('disconnect');
   assert.equal(d.status, 2);
   assert.match(d.stderr, /Usage: superclef disconnect <name>/);
-  assert.equal(run('import-state', '--from-superjev').status === 0, false, 'import-state is gone');
+  const gone = run('import-state', '--from-superjev');
+  assert.equal(gone.status, 2, 'import-state is refused');
+  assert.match(String(gone.stderr), /import-state was removed\. Connect your folder with: superclef connect <folder>/);
 });
 
 test('the default judge is clef: keyless, free, one short package', () => {
