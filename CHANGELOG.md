@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- `ask` never waits on a stale-set reconnect: the heal starts in the background and the answer comes from the sets as they are.
+- Safer ssh: the control socket path is short, and an unsafe socket folder is refused.
+- `uninstall` removes the `superclef` launcher.
+- The `SUPERCLEF_*` names alias `SUPERJEV_*` in the TypeScript entrypoints too. Docs use the SUPERCLEF names, and the version is read from package.json.
+
 ## 0.3.0
 
 - Trust window fix and hash-once port. The judge host is no longer built in: set `SUPERCLEF_CLEF_HOST` (or `SUPERJEV_CLEF_HOST`) to `user@host`, or `setup` and `ask` report NOT READY.
