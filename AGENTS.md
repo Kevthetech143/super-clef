@@ -242,3 +242,5 @@ ln -s "$(pwd)/skills/super-jev-connect" ~/.claude/skills/super-jev-connect
 Full reference, the exit-code table, and the `ask` routing keywords: [`skills/super-jev/SKILL.md`](skills/super-jev/SKILL.md).
 
 Tests: `python3 -m pytest skills/super-jev/tests -q`, or `npm run test:skill` (pytest goes in a venv; see [GETTING-STARTED](docs/GETTING-STARTED.md) step 1). Fully offline; every wrapped door is a fake in the test suite.
+
+Environment names: set `SUPERCLEF_X` for STATE_DIR, PRINCIPAL, CLEF_HOST, CLEF_DIR, JUDGE, BIN_DIR, INSTALL_DIR, REPO_URL, SAVE_AFTER, AUTO_CACHE. The older `SUPERJEV_X` name still works; `SUPERCLEF_X` wins when both are set.
