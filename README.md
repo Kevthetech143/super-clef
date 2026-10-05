@@ -2,7 +2,7 @@
 
 Your agent asks in its own words; Super Clef finds the file in your connected notes, checks the claim, and remembers what you approved. The judge is Cloudflare **clef-flash** (Apache-2.0, 4-bit) running on a second Apple-silicon machine reached over ssh. It has its own terminal app, and makes no paid judge calls and needs no TypeSafe key.
 
-Status: v0.2.0. The reference manual below covers every command; where it says Jev, read "the judge" (see "What changed" for the clef judge).
+Status: v0.2.0. The reference manual below covers every command; where it says Jev, read "the judge" (see "How the clef judge works").
 
 ## Use it
 
@@ -151,7 +151,7 @@ Tested on macOS and Linux. Windows is untested.
 python3 skills/super-jev/setup.py --uninstall
 ```
 
-Removes everything Super Clef wrote : the state directory (`$SUPERCLEF_STATE_DIR` or
+Removes everything Super Clef wrote: the state directory (`$SUPERCLEF_STATE_DIR` or
 `~/.local/state/super-clef`: the memory config, connected pointers, cached answers and
 logs), `skills/super-jev/prepare-cache/`, `ledger/` and `autoheal-state/` in this
 checkout, an older app's config (`~/.config/superjev/config.json`, which held the key),
