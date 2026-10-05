@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.2
 
+- In-process memory for repeat asks, ssh control master kept for 4 hours, and a secret-scan cache.
+- The warm clef judge now idles out after 2 hours by default (`SUPERCLEF_CLEF_IDLE`).
 - **File index (on by default; `SUPERCLEF_INDEX=0` turns it off).** Ported from Super Jev: a per-principal `index.sqlite` (SQLite WAL, FTS5 passages) built by a detached updater after a connect or refresh, and after an ask at most every 10 minutes. An ask takes the best 200 files by bm25 on the question's words and on the table-of-contents words from the index, re-scores only those, and sha-checks only the files it serves, instead of loading the whole word-index JSON, matching close spellings with difflib and scanning every file. A set the index does not hold completely and currently (not yet built, stale, older generation) is searched the old way in the same ask; a busy, missing or damaged index falls back the same way and never loses an answer. One updater per principal (flock). The engine config key `"indexRead": false` also turns it off.
 
 ## 0.3.1
