@@ -94,6 +94,28 @@ def test_second_updater_exits_quietly_while_the_lock_is_held(tmp_path, monkeypat
     assert rig.panel_calls == 2
 
 
+def test_a_kick_that_loses_the_lock_leaves_a_marker_and_the_running_sync_loops_once_more(tmp_path, monkeypatch):
+    notes, names, sdir = rp.build(tmp_path, monkeypatch, 10)
+    rp.Rig(monkeypatch, notes, names)
+    sdir.mkdir(parents=True, exist_ok=True)
+    with open(sdir / "index-update.lock", "a") as held:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert ask.index_sync(rp.PRINCIPAL, sdir) == 0
+    assert (sdir / "index-update.pending").exists()  # the dropped kick is remembered
+    real, runs = ask._index_sync, []
+
+    def sync_with_a_kick_landing_mid_run(principal, d):
+        runs.append(1)
+        if len(runs) == 1:
+            (d / "index-update.pending").touch()  # another kick lost the lock while this one ran
+        return real(principal, d)
+    monkeypatch.setattr(ask, "_index_sync", sync_with_a_kick_landing_mid_run)
+    assert ask.index_sync(rp.PRINCIPAL, sdir) == 0
+    assert len(runs) == 2 and not (sdir / "index-update.pending").exists()
+    ask.index_sync(rp.PRINCIPAL, sdir)
+    assert len(runs) == 3  # no marker: one pass only
+
+
 def test_stopped_run_keeps_its_committed_work_and_marks_only_its_pointers(tmp_path, monkeypatch):
     notes, names, sdir = rp.build(tmp_path, monkeypatch, 60)
     rp.Rig(monkeypatch, notes, names)

@@ -2052,6 +2052,7 @@ def edited_held(pointers: list, exclude=(), reads=None) -> dict:
 INDEX_FILE = "index.sqlite"
 INDEX_STAMP = "index-sync.stamp"
 INDEX_LOCK = "index-update.lock"
+INDEX_PENDING = "index-update.pending"  # touched by an updater that lost the lock
 INDEX_MAX_AGE_SECS = 24 * 3600   # an index not synced for a day is stale: today's path runs
 INDEX_SPAWN_EVERY_SECS = 600     # detached updater after an ask, at most this often (sooner on a served mismatch)
 
@@ -2353,13 +2354,25 @@ def index_sync(principal: str, sdir: Path) -> int:
         lock = open(sdir / INDEX_LOCK, "a")
     except OSError:
         return 0
+    pending = sdir / INDEX_PENDING
+    for attempt in (0, 1):
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except OSError:
+            try:
+                pending.touch()  # the running sync loops once more when it sees this: a kick is never dropped
+            except OSError:
+                pass
+            if attempt:
+                lock.close()
+                return 0
     try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        lock.close()
-        return 0
-    try:
-        return _index_sync(principal, sdir)
+        while True:
+            pending.unlink(missing_ok=True)  # a kick that lands from here on makes one more pass
+            rc = _index_sync(principal, sdir)
+            if rc or not pending.exists():
+                return rc
     finally:
         lock.close()  # closing the file releases the lock
 
