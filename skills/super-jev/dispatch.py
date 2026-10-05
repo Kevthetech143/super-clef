@@ -46,10 +46,9 @@ def _wrapper_in_use(skill_dir: Path, args: list[str]) -> bool:
 _CLI_MODULES: dict = {}
 
 
-def run_memory(skill_dir: Path, req: dict):
-    """The memory action `req` answered in this process: the result dict `dispatch.py memory --input` would
-    print, or None when only a subprocess can answer (memory.sh is a custom wrapper whose --config this cannot
-    read). Same repo, config and error answers as command(); the one difference is no Python start-up."""
+def _target(skill_dir: Path):
+    """(wrapped, repo, config path) `memory` would run the engine with, or None when memory.sh is a custom wrapper
+    whose --config only its own process can read."""
     wrapped = _wrapper_in_use(skill_dir, [])
     if wrapped:
         wrapper = skill_dir / "memory.sh"
@@ -60,10 +59,43 @@ def run_memory(skill_dir: Path, req: dict):
         # The wrapper's repo is "$DIR/../.."; any other SUPERJEV_REPO it exports is one only its process honours.
         if any("$DIR/../.." not in line for line in re.findall(r"SUPERJEV_REPO=(.*)", body)):
             return None
-        repo, config = (skill_dir / ".." / "..").resolve(), next(g for g in found.groups() if g)
-    else:
-        repo = Path(os.environ["SUPERJEV_REPO"]) if os.environ.get("SUPERJEV_REPO") else Path(__file__).resolve().parents[2]
-        config = str(config_path())
+        return True, (skill_dir / ".." / "..").resolve(), next(g for g in found.groups() if g)
+    repo = Path(os.environ["SUPERJEV_REPO"]) if os.environ.get("SUPERJEV_REPO") else Path(__file__).resolve().parents[2]
+    return False, repo, str(config_path())
+
+
+def _cli_module(entry: Path):
+    cli = _CLI_MODULES.get(entry)
+    if cli is None:
+        if str(entry.parent) not in sys.path:
+            sys.path.append(str(entry.parent))  # cli.py imports its sibling service.py
+        spec = importlib.util.spec_from_file_location("_verified_pointer_cli", entry)
+        cli = _CLI_MODULES[entry] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cli)
+    return cli
+
+
+def engine_config(skill_dir: Path):
+    """The engine's resolved config dict (its registry "db" path among it) for this install, or None when it cannot
+    be read here. Same repo and config run_memory uses; reads the file, runs nothing."""
+    target = _target(skill_dir)
+    if target is None:
+        return None
+    _wrapped, repo, config = target
+    entry = repo / "experiments/verified-pointer-memory/cli.py"
+    if not entry.is_file() or not Path(config).is_file():
+        return None
+    return _cli_module(entry).load_config(config)
+
+
+def run_memory(skill_dir: Path, req: dict):
+    """The memory action `req` answered in this process: the result dict `dispatch.py memory --input` would
+    print, or None when only a subprocess can answer (memory.sh is a custom wrapper whose --config this cannot
+    read). Same repo, config and error answers as command(); the one difference is no Python start-up."""
+    target = _target(skill_dir)
+    if target is None:
+        return None
+    wrapped, repo, config = target
     entry = repo / "experiments/verified-pointer-memory/cli.py"
     if wrapped and not entry.is_file():
         return None  # let the wrapper's own process report it
@@ -81,13 +113,7 @@ def run_memory(skill_dir: Path, req: dict):
                 "nextAction": "configure-memory-runtime",
                 "hint": "Memory needs the Super Jev repository runtime first. Set SUPERJEV_REPO to its checkout (containing experiments/verified-pointer-memory/cli.py), or repair the installed memory.sh wrapper. Then run memory --describe; data queries also need a reviewed dataset and memory config.",
                 "helpCommand": "help --topic register-setup"}
-    cli = _CLI_MODULES.get(entry)
-    if cli is None:
-        if str(entry.parent) not in sys.path:
-            sys.path.append(str(entry.parent))  # cli.py imports its sibling service.py
-        spec = importlib.util.spec_from_file_location("_verified_pointer_cli", entry)
-        cli = _CLI_MODULES[entry] = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(cli)
+    cli = _cli_module(entry)
     return json.loads(json.dumps(cli.handle(req, config)))
 
 

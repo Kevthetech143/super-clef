@@ -2,7 +2,7 @@
 Internals keep reading SUPERJEV_*. Import it before any module that reads the environment."""
 import os
 
-NAMES = ("STATE_DIR", "PRINCIPAL", "CLEF_HOST", "CLEF_DIR", "JUDGE", "BIN_DIR", "INSTALL_DIR", "REPO_URL", "SAVE_AFTER", "AUTO_CACHE", "PRIVATE_DIRS", "GATE_CMD", "NEW_FILE_SCAN", "CLEF_IDLE", "CLEF_WARM")
+NAMES = ("STATE_DIR", "PRINCIPAL", "CLEF_HOST", "CLEF_DIR", "JUDGE", "BIN_DIR", "INSTALL_DIR", "REPO_URL", "SAVE_AFTER", "AUTO_CACHE", "PRIVATE_DIRS", "GATE_CMD", "NEW_FILE_SCAN", "CLEF_IDLE", "CLEF_WARM", "INDEX")
 
 
 def alias(env=None):

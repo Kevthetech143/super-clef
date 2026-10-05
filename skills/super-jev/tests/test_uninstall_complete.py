@@ -74,9 +74,26 @@ def test_uninstall_after_an_ask_with_nothing_connected_leaves_no_state(env, caps
     assert "left in place" not in capsys.readouterr().out
 
 
+def test_a_connected_ask_with_the_index_default_leaves_nothing_after_uninstall(env, monkeypatch, capsys):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import test_index_read_path as t
+    notes, names, sdir = t.build(env, monkeypatch, 30)
+    t.Rig(monkeypatch, notes, names)
+    monkeypatch.delenv("SUPERJEV_INDEX", raising=False)  # unset = on
+    monkeypatch.setattr(t.ask.dispatch, "engine_config", lambda *_a: None)
+    monkeypatch.setattr(t.ask, "spawn_index_updater", lambda principal: None)  # no detached process in a test
+    t.sync(sdir)
+    rc, out = t.ask_it(t.PLANTED[0][0], sdir, capsys)
+    assert rc == 0
+    assert (sdir / "index.sqlite").exists() and (sdir / "index-sync.stamp").exists(), "the ask must have used the index"
+    touch(sdir.parent / "_memory" / "config.json", "{}")
+    assert setup.main(["--uninstall"]) == 0
+    assert not sdir.parent.exists()
+
+
 # (l) every name a principal folder gets is removed
 PRINCIPAL_NAMES = ["lookups.jsonl", "traces.jsonl", "traces.jsonl.1", "approvals.jsonl", "claim-verdicts.json",
-                   "pointer_health.json", "pointer-words.json", "pointer-words.4242.tmp",
+                   "pointer_health.json", "pointer-words.json", "pointer-words.4242.tmp", "index-sync.stamp", "index-update.lock", "index.sqlite-wal", "index.sqlite-shm", "word-index.json", "set-rows.json",
                    "scorecard-cases.jsonl", "scorecard-cases.tmp", "manual/a-note.md", "github/acme-widgets/README.md"]
 
 
@@ -198,6 +215,10 @@ def writer_names():
                       else "autoheal-state" if base == "STATE_DIR" else "ledger")
             parts = re.findall(r'f?"([^"\n]*)"', m.group("chain"))
             found.add((folder, "/".join(re.sub(r"\{[^}]*\}", "x", p) for p in parts)))
+        consts = dict(re.findall(r'^([A-Z][A-Z0-9_]*)\s*=\s*"([^"\n]+)"', path.read_text(), re.M))
+        for m in re.finditer(r"\bsdir\s*/\s*([A-Z][A-Z0-9_]*)\b", path.read_text()):
+            if m.group(1) in consts:
+                found.add(("principal", consts[m.group(1)]))
     return sorted(found)
 
 

@@ -184,6 +184,26 @@ def test_a_held_file_is_not_retried_until_the_file_changes(tmp_path, monkeypatch
     assert calls.count("connect") == 2  # the file changed: tried again
 
 
+def test_a_recipe_reconnect_starts_the_file_index_updater_and_a_failed_one_does_not(tmp_path, monkeypatch):
+    import prepare_bulk
+    cache_dir, clock = _setup(tmp_path, monkeypatch)
+    src = tmp_path / "notes.md"; src.write_text("made-up note\n")
+    kicked = []
+    monkeypatch.setattr(prepare_bulk, "kick_index_updater", lambda principals: kicked.append(list(principals)))
+    calls = []
+    memory = _recipe_memory(src, calls)
+    assert ah.reconnect_recipe("gamma", "tester", memory=memory) == "failed"
+    assert kicked == []  # nothing was re-registered: the index is not behind
+    recipe = memory({"action": "recipe"})["recipe"]
+    ok = lambda req: ({"status": "ok", "recipe": recipe} if req["action"] == "recipe"  # noqa: E731
+                      else {"status": "preparation-required", "reason": "review-required", "navigationSHA": "n", "sources": []}
+                      if not req.get("reviewed") else {"status": "registered"})
+    src.write_text("made-up note, edited\n")  # the held mark waits for the file to change
+    clock[0] += ah.RETRY_SECS + 1  # and a failed set waits out its back-off
+    assert ah.reconnect_recipe("gamma", "tester", memory=ok) == "reconnected"
+    assert kicked == [["tester"]]
+
+
 def test_a_failure_that_is_not_a_deterministic_refusal_is_still_retried(tmp_path, monkeypatch):
     cache_dir, clock = _setup(tmp_path, monkeypatch)
     src = tmp_path / "notes.md"; src.write_text("made-up note\n")
