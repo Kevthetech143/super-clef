@@ -863,21 +863,43 @@ class Service:
 
     def sources(
         self, name: str, principal: str, offset: int = 0, limit: int = 25,
+        last_good: bool = False,
     ) -> dict[str, Any]:
-        """List the registered reviewed sources available through a pointer."""
+        """List the registered reviewed sources available through a pointer.
+
+        last_good=True lists a stale pointer's sources as registered instead of refusing it,
+        as navigate does: the result carries 'stale' (its status plus the files changed or
+        missing since), a missing file is not listed, and a changed one keeps its reviewed sha."""
         if (isinstance(offset, bool) or not isinstance(offset, int) or offset < 0 or
                 isinstance(limit, bool) or not isinstance(limit, int)
                 or limit < 1 or limit > 100):
             raise ValueError('offset must be nonnegative and limit must be 1 to 100')
+        if not isinstance(last_good, bool):
+            raise ValueError('lastGood must be a boolean')
         pointer, error = self.pointer(name, principal)
+        stale = None
         if error:
-            return error
-        manifest = self._manifest(pointer['snapshot']['entry'])
+            if not (last_good and error['status'] == 'preparation-required'):
+                return error
+            pointer, stale = self._last_good(name, principal)
+            if pointer is None:
+                return error
+        try:
+            manifest = self._manifest(pointer['snapshot']['entry'])
+        except (OSError, ValueError, KeyError, TypeError):
+            if stale is None:
+                raise
+            # Re-prepared since registration: the snapshot still holds its reviewed sources.
+            manifest = {'sources': pointer['snapshot'].get('sources') or []}
         rows = []
         for source in manifest['sources']:
+            if stale and source.get('originalPath', source['path']) in stale['missing']:
+                continue
             try:
                 line_count = len(Path(source['path']).read_text().splitlines())
             except (OSError, UnicodeError):
+                if stale:
+                    continue
                 return {'status': 'preparation-required'}
             rows.append({
                 'sourceId': source['id'], 'contentSHA': source['contentSHA'],
@@ -893,6 +915,8 @@ class Service:
                   'limit': limit, 'total': len(rows)}
         if offset + len(page) < len(rows):
             result['nextOffset'] = offset + len(page)
+        if stale:
+            result['stale'] = stale
         return result
 
     def navigate(
