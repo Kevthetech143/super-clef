@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+- Trust window fix and hash-once port. The judge host is no longer built in: set `SUPERCLEF_CLEF_HOST` (or `SUPERJEV_CLEF_HOST`) to `user@host`, or `setup` and `ask` report NOT READY.
+- `superclef setup`, `connect` and `disconnect`; `media remove`; `import-state` removed. `setup` checks the judge host over ssh and points at `superclef connect`.
+- `ask`: an unreachable judge exits 3 with a clear message; a first run with nothing connected says to run `superclef connect`; `clef_not_found` is recorded in the trace.
+- `SUPERCLEF_*` environment names alias every `SUPERJEV_*` one at all entrypoints.
+- Standalone docs; the installer clones super-clef and links only `superclef`, warning before it replaces another checkout's launcher.
+
 ## 0.2.0
 
 - Honest not-found: a clef "none" at or above `none_bar` (0.9) is a clean not-found (PR 10; the entry at the top of 0.1.0 below). Connect parity (PRs 12-16): `--writer auto` resolves to builtin so a big connect never checks files on the clef machine; skill search works without a TypeSafe key; a first run with an empty prepare-cache says to import state instead of counting a pointer failure; manual notes and path-connected sets are searched through local rows, never navigate; a dead judge keeps the word-search order of the final list and names the judge as down.

@@ -1,6 +1,6 @@
 {
   "name": "super-clef",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Super Clef: a competing Super Jev built on the local clef judge (Cloudflare clef-flash on a second Apple-silicon machine reached over ssh), searching the same connected files",
   "type": "module",

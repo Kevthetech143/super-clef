@@ -2,7 +2,7 @@
 
 Your agent asks in its own words; Super Clef finds the file in your connected notes, checks the claim, and remembers what you approved. The judge is Cloudflare **clef-flash** (Apache-2.0, 4-bit) running on a second Apple-silicon machine reached over ssh. It has its own terminal app, and makes no paid judge calls and needs no TypeSafe key.
 
-Status: v0.2.0. The reference manual below covers every command; where it says Jev, read "the judge" (see "How the clef judge works").
+Status: v0.3.0. The reference manual below covers every command; where it says Jev, read "the judge" (see "How the clef judge works").
 
 ## Use it
 
@@ -10,7 +10,7 @@ Status: v0.2.0. The reference manual below covers every command; where it says J
 npm run clef                                  open the window (or: node bin/superclef.js)
 node bin/superclef.js "your question"        one-shot question
 node bin/superclef.js /check "a statement"    check a statement against your notes
-node bin/superclef.js --version               super-clef 0.2.0
+node bin/superclef.js --version               super-clef 0.3.0
 node bin/superclef.js setup                   check this Mac is ready (one time)
 node bin/superclef.js connect <folder>        connect a folder of notes (.md)
 node bin/superclef.js disconnect <name>       forget a connected folder (your files stay)
