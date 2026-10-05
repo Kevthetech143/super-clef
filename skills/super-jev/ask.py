@@ -1650,10 +1650,12 @@ def covered_by_parent(pointer: str, all_pointers) -> bool:
     return bool(base and n.isdigit() and base in all_pointers and _has_own_cache(base))
 
 def source_rows(principal: str, pointer: str):
-    """{path: entry} from the pointer's reviewed sources (local engine call, no judge), or None when unreadable."""
+    """{path: entry} from the pointer's reviewed sources (local engine call, no judge), or None when unreadable.
+    A stale set is listed as of its last refresh (lastGood), so its unchanged files stay searchable while it heals."""
     rows, offset = {}, 0
     while True:
-        out = memory({"action": "sources", "pointer": pointer, "principal": principal, "offset": offset, "limit": 100})
+        out = memory({"action": "sources", "pointer": pointer, "principal": principal, "offset": offset, "limit": 100,
+                      "lastGood": True})
         if not isinstance(out, dict) or out.get("status") != "ok":
             return None
         for src in out.get("sources") or []:
@@ -2102,6 +2104,9 @@ def pointer_fallbacks(idx, allowed, gens) -> dict:
             out[name] = "index update running for it"
         elif c["stale"]:
             out[name] = "stale (files changed since its last refresh)"
+        elif c["entries"] is None and auto_heal.is_stale_kind(c["status"]):
+            # The updater found no file list for it (a stale set listed before lastGood): its last good rows answer.
+            out[name] = "stale, its files not in the index"
         elif gens is not None and name in gens and c["generation"] != gens[name]:
             out[name] = "generation mismatch (index holds an older refresh)"
         elif c["entries"] and not c["files"] and c["complete"] != 2:
@@ -2841,7 +2846,12 @@ def refresh_hint(ptr: str, principal: str, kind: str) -> str:
     except Exception:
         recipe = None
     if recipe == "ok":
-        return (f"; its files changed since connect and replaying its connect recipe failed "
+        # Say a replay failed only when the last one did; a replay that never ran or is running is not a failure.
+        err = auto_heal.last_refresh_error(principal, ptr)
+        if err:
+            return (f"; its files changed since connect and replaying its connect recipe failed: {err} "
+                    f"(see {auto_heal.LOG_PATH})")
+        return (f"; its files changed since connect and it has a recorded connect recipe, which auto-heal replays "
                 f"(see {auto_heal.LOG_PATH})")
     if recipe == "no-recipe":
         return ("; its files changed since connect and it was not built by prepare_bulk, with no "
@@ -4804,7 +4814,6 @@ def connection_status(principal: str, as_json: bool = False) -> int:
             print(f"  {name}: ready")
         elif str(status).startswith(("preparation-required", "refresh-required")):
             hint = refresh_hint(name, principal, str(status))
-            hint = hint.replace("and replaying its connect recipe failed", "and it has a recorded connect recipe")
             print(f"  {name}: stale ({status})" + hint)
         else:
             print(f"  {name}: {status}")

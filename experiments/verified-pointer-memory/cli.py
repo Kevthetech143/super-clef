@@ -376,7 +376,8 @@ def run(request, config):
         return {'status': 'ok', 'recipes': {p: service.recipe(p, request['principal']) for p in request['pointers']}}  # one registry open for all
     if action == 'sources':
         return service.sources(request['pointer'], request['principal'],
-                               request.get('offset', 0), request.get('limit', 25))
+                               request.get('offset', 0), request.get('limit', 25),
+                               request.get('lastGood', False))
     return describe()
 
 
