@@ -46,6 +46,7 @@
  */
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, isAbsolute, join, resolve } from 'node:path';
+import { aliasEnv } from './env-alias.ts';
 import { getJudge, keyEnv, keyPresent } from './judge.ts';
 import { extractDescription } from './catalog-build-cli.ts';
 import {
@@ -493,6 +494,7 @@ Live mode needs ${keyEnv()}. Exit codes: 0 ok (including advisory
 fallback/no_match/clarify), 1 usage or input error.`;
 
 async function main(): Promise<number> {
+  aliasEnv(process.env);
   const args = process.argv.slice(2);
   if (!args.length || args.includes('--help')) { console.log(usage); return 0; }
 

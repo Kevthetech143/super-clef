@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { aliasEnv } from './env-alias.ts';
 import { getJudge } from './judge.ts';
 import { navigate, NavigationError, providerFailureReason } from './enhance/navigation.ts';
 import { BatchingEvaluator } from './enhance/coalesce.ts';
@@ -29,6 +30,7 @@ function checkedInput(input: unknown): { question?: unknown; catalog?: unknown; 
 }
 
 async function main(): Promise<void> {
+  aliasEnv(process.env);
   // Navigation has exactly one provider evaluation per explored frontier.
   // Reject Jev's optional sampling/pin modes instead of silently changing the
   // call count or enabling its pin retry path for this command.

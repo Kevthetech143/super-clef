@@ -4,6 +4,7 @@ import { statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import { styleText, stripVTControlCharacters } from 'node:util';
+import { aliasEnv } from './env-alias.ts';
 
 export const COMMANDS = ['/check', '/right', '/wrong', '/status', '/help', '/exit'];
 /** How a user gets back to the window: the one wording every screen and message uses. */
@@ -128,13 +129,6 @@ export function helperCall(turn: Turn, s: Session): string[] {
 export function childEnv(env: NodeJS.ProcessEnv, keyEnv: string, fileKey: string): NodeJS.ProcessEnv {
   const e = aliasEnv({ ...env });
   return !keyEnv || e[keyEnv] || !fileKey ? e : { ...e, [keyEnv]: fileKey };
-}
-
-/** SUPERCLEF_X is the public name for SUPERJEV_X: copy each set one over (new name wins). */
-export const ALIAS_NAMES = ['STATE_DIR', 'PRINCIPAL', 'CLEF_HOST', 'CLEF_DIR', 'JUDGE', 'BIN_DIR', 'INSTALL_DIR', 'REPO_URL', 'SAVE_AFTER', 'AUTO_CACHE'];
-export function aliasEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  for (const n of ALIAS_NAMES) if (env['SUPERCLEF_' + n]) env['SUPERJEV_' + n] = env['SUPERCLEF_' + n];
-  return env;
 }
 
 /** What a key press does in each mode (prompt, yes/no, hidden key). */

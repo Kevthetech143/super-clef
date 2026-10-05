@@ -8,6 +8,7 @@
  */
 import { mkdir, open, readFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { aliasEnv } from './env-alias.ts';
 import { getJudge, keyEnv, requireKey } from './judge.ts';
 import { StubEvaluator, choiceAnswer } from './enhance/stub.ts';
 import {
@@ -151,6 +152,7 @@ function number(raw: string | undefined, flag: string): number {
 }
 
 try {
+  aliasEnv(process.env);
   const args = process.argv.slice(2);
   if (!args.length || args.includes('--help')) { console.log(usage); process.exit(0); }
 

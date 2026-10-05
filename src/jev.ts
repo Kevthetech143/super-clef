@@ -1,3 +1,4 @@
+import { aliasEnv } from './env-alias.ts';
 import type { Evaluator, Request, Evaluation, Answer } from './types.ts';
 import { payloadHasSecret } from './secret-scan.ts';
 import { JUDGE_PROFILE, type JudgeProfile } from './judge-profile.ts';
@@ -132,6 +133,7 @@ export type JudgePin = { temperature?: number; seed?: number };
  * carries no pin fields, so the pin can never be the cause of a failure.
  * Exported for tests. */
 export function judgePinFields(env: NodeJS.ProcessEnv = process.env): JudgePin {
+  env = aliasEnv({ ...env });
   const fields: JudgePin = {};
   const rawT = env[JUDGE_TEMPERATURE_ENV];
   if (rawT !== undefined && rawT !== '') {
@@ -157,6 +159,7 @@ export function judgePinFields(env: NodeJS.ProcessEnv = process.env): JudgePin {
 /** How many times to call the judge per evaluate (default 1). Malformed or
  * non-positive values degrade to 1 with a stderr warning. Exported for tests. */
 export function judgeRuns(env: NodeJS.ProcessEnv = process.env): number {
+  env = aliasEnv({ ...env });
   const raw = env[JUDGE_RUNS_ENV];
   if (raw === undefined || raw === '') return 1;
   const n = Number(raw);

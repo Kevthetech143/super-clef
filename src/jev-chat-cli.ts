@@ -10,6 +10,7 @@ import { constants, homedir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { aliasEnv } from './env-alias.ts';
 import { loadJudgeProfile } from './judge-profile.ts';
 import {
   COMMANDS, HELP, OPEN, USAGE, childEnv, confirmText, fixOf, helperCall, keyAction, launchLine, pack, pointerName, prose, readLine, render,
@@ -31,7 +32,8 @@ type Reply = { text: string; code: number; data?: any; stopped?: boolean; fix?: 
 const lastLine = (s: string) => s.trim().split('\n').pop()?.trim() ?? '';
 
 export async function run(io: IO): Promise<number> {
-  const { argv, env, stdin, stdout, stderr } = io;
+  const { argv, stdin, stdout, stderr } = io;
+  const env = aliasEnv({ ...io.env });
   const home = env.HOME || homedir();
   const profile = loadJudgeProfile(undefined, undefined, env);
   const { keyEnv, vendor } = profile;

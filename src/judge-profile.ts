@@ -2,6 +2,7 @@
  * stated once. Both read skills/super-jev/judge_profiles.json and derive the same numbers from it.
  * SUPERJEV_JUDGE picks the profile (default: the file's default; 'fake' is the test judge and uses
  * the default's numbers); an unknown name is an error. */
+import { aliasEnv } from './env-alias.ts';
 import { readFileSync } from 'node:fs';
 
 /** The one setting that picks the judge, in both languages. */
@@ -72,6 +73,7 @@ type Raw = {
 
 /** The profile named `name`; else SUPERJEV_JUDGE; else the table's default. `file` is for tests. */
 export function loadJudgeProfile(name?: string, file: URL | string = PROFILES_URL, env: NodeJS.ProcessEnv = process.env): JudgeProfile {
+  env = aliasEnv({ ...env });
   const data = JSON.parse(readFileSync(file, 'utf8')) as { default: string; fake_uses?: string; profiles: Record<string, Raw> };
   const want = name ?? (env[JUDGE_ENV]?.trim() || env.SUPERJEV_TEST_DEFAULT_JUDGE?.trim() || data.default);
   const key = want === FAKE_JUDGE ? (data.fake_uses ?? data.default)

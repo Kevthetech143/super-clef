@@ -2874,3 +2874,10 @@ test('childEnv: SUPERCLEF_X is copied into SUPERJEV_X, the new name wins, unset 
   assert.equal(e.SUPERJEV_JUDGE, 'keep');
   assert.equal(e.SUPERJEV_PRINCIPAL, undefined);
 });
+
+test('H1 launch: run(io) with only SUPERCLEF_PRINCIPAL in the env it is given passes that name (the alias applies to the passed env)', async () => {
+  const r = rig([{ when: '--status', out: { v: 1, outcome: 'not-supported', why: 'that principal name is not valid: use letters and digits', next: 'rephrase' }, code: 2 }]);
+  const w = win(r, { env: { SUPERCLEF_PRINCIPAL: 'pat jones' } });
+  assert.equal(await w.exit(), 2);
+  assert.equal(r.calls()[0].args[r.calls()[0].args.indexOf('--principal') + 1], 'pat jones');
+});
