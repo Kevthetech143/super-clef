@@ -1876,10 +1876,10 @@ def flush_scan_cache() -> None:
         pass  # a cache that cannot be written only costs the next ask its scan
 
 
-def text_can_leave(path: str, raw: bytes, text: str) -> bool:
-    """clean_text(text, path) is not None, remembered once per file content (its sha256 and type, which the
+def text_can_leave(path: str, raw: bytes, text: str, sha=None) -> bool:
+    """clean_text(text, path) is not None, remembered once per file content (`sha`, else hashed here, and type, which the
     section split depends on) so an unchanged edited file is not scanned again. Holds no file text."""
-    key = f"{hashlib.sha256(raw).hexdigest()}:{Path(path).suffix.lower()}"
+    key = f"{sha or hashlib.sha256(raw).hexdigest()}:{Path(path).suffix.lower()}"
     known = _SCAN["rows"].get(key)
     if isinstance(known, bool):
         return known
@@ -1890,14 +1890,14 @@ def text_can_leave(path: str, raw: bytes, text: str) -> bool:
     return verdict
 
 
-def edited_readable(path: str, ptr: str, entry, raw: bytes, text: str) -> bool:
+def edited_readable(path: str, ptr: str, entry, raw: bytes, text: str, sha=None) -> bool:
     """May a reviewed file edited since connect be read at its current text while its pointer
     waits on the refresh? Only as a refresh would admit it: reviewed at a known version and not
     failed by its last review, under the size ceiling, no secret-looking line, and still inside
     the pointer's recorded scope."""
     return (isinstance(entry, dict) and bool(entry.get("pass")) and bool(entry.get("sha256"))
             and len(raw) <= prepare_bulk.CEILING_BYTES
-            and text_can_leave(path, raw, text)
+            and text_can_leave(path, raw, text, sha)
             and (bool(entry.get("local")) or refresh_would_admit(path, ptr)))  # a local row's scope is the set's listed files
 
 
@@ -2009,7 +2009,7 @@ def toc_corpus(cands, reads, fb_paths=None) -> dict:
             corpus[tpath] = (tptr, tentry)
             continue
         tgot = read_sha(tpath, reads)
-        if tgot and edited_readable(tpath, tptr, tentry, tgot[0], tgot[0].decode("utf-8", "replace")):
+        if tgot and edited_readable(tpath, tptr, tentry, tgot[0], tgot[0].decode("utf-8", "replace"), tgot[1]):
             corpus[tpath] = (tptr, tentry)
     return corpus
 
@@ -2033,10 +2033,10 @@ def edited_held(pointers: list, exclude=(), reads=None) -> dict:
             continue
         raw = got[0]
         text = raw.decode("utf-8", "replace")
-        if edited_readable(path, ptr, entry, raw, text):
+        if edited_readable(path, ptr, entry, raw, text, got[1]):
             done.add(path)
             continue
-        why.setdefault(path, "secret" if not text_can_leave(path, raw, text) else "stuck" if (
+        why.setdefault(path, "secret" if not text_can_leave(path, raw, text, got[1]) else "stuck" if (
             len(raw) > prepare_bulk.CEILING_BYTES or not refresh_would_admit(path, ptr)) else "refresh")
     flush_stat_memo()
     out = {"secret": [], "stuck": [], "refresh": []}
