@@ -14,20 +14,20 @@ unless you add `--findability`.
    `python3 --version` must print `3.10` or newer. If either is missing or too
    old, install it into your home folder (no admin rights needed). Python first:
 
-   ``bash
+   ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh
    source "$HOME/.local/bin/env"
    uv python install 3.12 --default
-   ``
+   ```
 
    Then Node (the `touch` line is for zsh, the Mac default; skip it on bash):
 
-   ``bash
+   ```bash
    touch ~/.zshrc
    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh | bash
    \. "$HOME/.nvm/nvm.sh"
    nvm install 24
-   ``
+   ```
 
    Already use Homebrew? Run `brew install node python` instead of the lines above.
    If your tool starts every command in a fresh shell and `node` or `python3`
@@ -42,24 +42,24 @@ unless you add `--findability`.
    (the key never goes through chat). They run this, paste the key, press Enter,
    then Ctrl-D:
 
-   ``bash
+   ```bash
    (umask 077; cat > ~/.typesafe-api-key)
-   ``
+   ```
 
    Then load it:
 
-   ``bash
+   ```bash
    export TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)"
-   ``
+   ```
 
    Never print the key, paste it into a command line, or write it into this repo.
    Each new shell needs the export again.
 
 3. **Run setup.** It is safe to run again at any time.
 
-   ``bash
+   ```bash
    python3 skills/super-jev/setup.py
-   ``
+   ```
 
    Success: the last block starts with `READY.` If it says `NOT READY`, fix each
    listed item and run it again.
@@ -67,10 +67,10 @@ unless you add `--findability`.
 4. **Connect a folder of `.md` files** (only files your human said you may send
    to TypeSafe):
 
-   ``bash
+   ```bash
    python3 skills/super-jev/prepare_bulk.py --root /path/to/folder \
      --pointer my-notes --principal me --writer builtin
-   ``
+   ```
 
    Success: `connect: registered pointer=my-notes`, then a last line
    `CONNECTED n, HELD 0, FAILED 0`, and exit code 0 (add `--findability` for a
@@ -104,9 +104,9 @@ unless you add `--findability`.
 
 5. **Ask a question you know the answer to.**
 
-   ``bash
+   ```bash
    python3 skills/super-jev/ask.py --principal me "your question in plain words"
-   ``
+   ```
 
    Success: ranked lines like `0.99  /path/to/file.md  [my-notes]`. This is
    where the answer is, not the answer itself: open the top file, read it, and
@@ -121,9 +121,9 @@ unless you add `--findability`.
 
 7. **Check a claim before you send it.** Give it a claim you know is false:
 
-   ``bash
+   ```bash
    python3 skills/super-jev/dispatch.py check --claim "the claim" /path/to/file-you-read.md
-   ``
+   ```
 
    Exit 0 and `VERDICT: CLEAN` means send it. Exit 3 and `VERDICT: READ (blocked)`
    means do not send it: the file does not support the claim (`NOT_SUPPORTED`)
@@ -138,9 +138,9 @@ unless you add `--findability`.
    `~/.typesafe-api-key`: tell them to delete it if they want the key gone. Their files
    are never touched, even one that sits in a folder Super Clef writes to):
 
-   ``bash
+   ```bash
    python3 skills/super-jev/setup.py --uninstall
-   ``
+   ```
 
 ## How to drive it for your human
 
@@ -220,10 +220,10 @@ This release does not implement priority scoring, file moves, database writes, r
 
 Install by symlink or copy. `skills/super-jev-connect/` is a second skill for onboarding and refresh — registering a connector, drafting and gating its labels with a confirmed cheap writer model, and refreshing a pointer after its files change; install both:
 
-``bash
+```bash
 ln -s "$(pwd)/skills/super-jev" ~/.claude/skills/super-jev
 ln -s "$(pwd)/skills/super-jev-connect" ~/.claude/skills/super-jev-connect
-``
+```
 
 `skills/super-jev-build-cycle/` is an optional third skill: a plain-CLI build cycle (`build_cycle.py`) that uses Super Clef in every step and leaves a receipt per step. Link it into any agent's skills folder next to `super-jev` (it finds `../super-jev/`).
 

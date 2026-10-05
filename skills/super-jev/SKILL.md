@@ -4,7 +4,7 @@ description: "Find skills and reviewed brain/doc evidence through Super Clef sou
 ---
 
 # Super Clef
-Super Clef 0.2.0 build: the judge is clef (profile `clef`, the default; `SUPERCLEF_JUDGE=typesafe-jev`` for Jev), its "none" and any pick above 0.9 are listed as possible, state is `~/.local/state/super-clef`, `superclef connect <folder>` connects your notes (README). Run from this skill directory: `python3 dispatch.py <tool> ...` (or `ask.py` directly, as shown below). Use the user's original request and relevant context; keep backend names and setup mechanics out of ordinary replies. **Remember or one-off:** connect what agents will search again without knowing where it is (notes, lessons, decisions, a library's docs; `super-jev-connect`), then `ask.py` finds it. Check anything you already have in front of you directly, with nothing connected: new code, a worker's report, a pasted page: `python3 dispatch.py check FILE [FILE ...] --claim "statement"` (a unified diff is judged as code) or `python3 dispatch.py verify REPORT --worktree DIR`; a shelf lookup about files that are not connected answers NOT FOUND. A one-off answer worth keeping becomes a fact: `ask.py --principal YOUR_AGENT --add "question" "answer" --source FILE`.
+Super Clef 0.2.0 build: the judge is clef (profile `clef`, the default; `SUPERCLEF_JUDGE=typesafe-jev` for Jev), its "none" and any pick above 0.9 are listed as possible, state is `~/.local/state/super-clef`, `superclef connect <folder>` connects your notes (README). Run from this skill directory: `python3 dispatch.py <tool> ...` (or `ask.py` directly, as shown below). Use the user's original request and relevant context; keep backend names and setup mechanics out of ordinary replies. **Remember or one-off:** connect what agents will search again without knowing where it is (notes, lessons, decisions, a library's docs; `super-jev-connect`), then `ask.py` finds it. Check anything you already have in front of you directly, with nothing connected: new code, a worker's report, a pasted page: `python3 dispatch.py check FILE [FILE ...] --claim "statement"` (a unified diff is judged as code) or `python3 dispatch.py verify REPORT --worktree DIR`; a shelf lookup about files that are not connected answers NOT FOUND. A one-off answer worth keeping becomes a fact: `ask.py --principal YOUR_AGENT --add "question" "answer" --source FILE`.
 
 ## Commands
 
@@ -23,9 +23,9 @@ Run `python3 ask.py --principal YOUR_AGENT --status` for scoped ready/stale/unkn
 
 A `preparation-required` result, an unknown pointer, or onboarding a new person/project is setup work, not "nothing found": see [`super-jev-connect/SKILL.md`](../super-jev-connect/SKILL.md). Check what you already have first: `YOUR_AGENT_NAME` is the agent's exact name: letters, digits, `.`, `_`, `-`, starting with a letter or digit, at most 64 (no spaces or slashes); any other name is refused.
 
-``sh
+```sh
 python3 dispatch.py memory --principal YOUR_AGENT_NAME
-``
+```
 
 ## Live decision traces and Jev's voice
 
@@ -33,9 +33,9 @@ Every lookup (cache hits too, tier `cache`/`stale`) appends one redacted JSON li
 
 When a lookup ends `OUTCOME: not-found`, the last line `ask.py` prints is exactly:
 
-``
+```
 Super Clef: I didn't have this. Want me to find it by hand and save it for next time?
-``
+```
 
 **A harness relaying `ask.py` output to a human must pass that line on verbatim.** Just above it, a miss prints `What was searched:` (connected sets, which matched by description, files read with the closest named), then any `Skipped at setup` files that may hold the answer (reason and fix; apply the fix, do not reconnect the folder), and `Next step (pick one):` with exact commands, even when some pointer errored. Act on it instead of guessing: if the answer lives in a file you have, connect its folder with the printed `prepare_bulk.py` command; if you know the answer, save it with the printed `--add` command; otherwise tell your human it was not found and offer a by-hand search. A miss after reading files points to the filtering trace, not reconnecting those files. Abstract worth questions are not treated as monetary values. A hit marked `possible` is a lead, not an answer: open and check the file before using it. The judge is picked by `SUPERCLEF_JUDGE` (default Jev); see docs/experimental/plugins.md.
 
