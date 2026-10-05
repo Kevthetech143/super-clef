@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-line installer for Super Jev's terminal chat CLI ("superjev").
+# One-line installer for Super Clef's terminal chat CLI ("superclef").
 #
 #   bash install.sh
 #
@@ -8,7 +8,7 @@
 # helpers need python3, which the app checks when it starts, not here.
 set -euo pipefail
 
-REPO_URL="${SUPERJEV_REPO_URL:-https://github.com/Kevthetech143/super-jev.git}"
+REPO_URL="${SUPERJEV_REPO_URL:-https://github.com/Kevthetech143/super-clef.git}"
 INSTALL_DIR="${SUPERJEV_INSTALL_DIR:-$HOME/.local/share/super-clef}"
 BIN_DIR="${SUPERJEV_BIN_DIR:-$HOME/.local/bin}"
 
@@ -53,25 +53,17 @@ if [ -d "$INSTALL_DIR/.git" ]; then
     || fail "Could not fast-forward $INSTALL_DIR (local changes?). Fix or remove it and re-run."
 
 else
-  info "Cloning super-jev into $INSTALL_DIR"
+  info "Cloning super-clef into $INSTALL_DIR"
   mkdir -p "$(dirname "$INSTALL_DIR")"
   git clone --quiet "$REPO_URL" "$INSTALL_DIR"
 fi
 
-info "Linking superjev to $BIN_DIR"
-if [ -e "$BIN_DIR/superjev" ] && ! grep -qE 'super-jev-installer|jev-chat-cli\.ts' "$BIN_DIR/superjev" 2>/dev/null; then
-  fail "$BIN_DIR/superjev exists and was not made by this installer; not overwriting it."
-fi
-cat > "$BIN_DIR/superjev" <<EOF
-#!/usr/bin/env bash
-# super-jev-installer
-exec node "$INSTALL_DIR/src/jev-chat-cli.ts" "\$@"
-EOF
-chmod +x "$BIN_DIR/superjev"
+info "Linking superclef to $BIN_DIR"
+BIN_DIR="$BIN_DIR" bash "$INSTALL_DIR/scripts/install-superclef.sh"
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) printf '\n\033[33mNote:\033[0m %s is not on your PATH.\nAdd this to your shell profile:\n  export PATH="%s:$PATH"\n' "$BIN_DIR" "$BIN_DIR" ;;
 esac
 
-info "Installed. Run: superjev"
+info "Installed. Run: superclef"
