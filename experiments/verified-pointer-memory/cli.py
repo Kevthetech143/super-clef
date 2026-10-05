@@ -375,6 +375,34 @@ def run(request, config):
     return describe()
 
 
+def error_result(error):
+    # Do not expose provider stderr, credentials, source passages or cache bodies.
+    return {'status': 'error', 'reason': str(error) if isinstance(error, ValueError) and not isinstance(error, json.JSONDecodeError) else type(error).__name__}
+
+
+def finish(result):
+    add_hints(result)
+    result.setdefault('nextAction', NEXT.get(result['status'], 'record-unresolved'))
+    if 'message' in result:
+        result = {'message': result.pop('message'), **result}
+    return result
+
+
+def handle(request, config_path):
+    """One action request in, the same result dict main() prints for --input, without a process."""
+    old = os.umask(0o077)  # main() sets this for its own process; keep the caller's afterwards
+    try:
+        try:
+            if not isinstance(request, dict):
+                raise ValueError('Input must be a JSON object.')
+            result = run(request, load_config(config_path))
+        except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as error:
+            result = error_result(error)
+        return finish(result)
+    finally:
+        os.umask(old)
+
+
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
@@ -428,12 +456,8 @@ def main():
                 result['confirmCommand'] = shlex.join(confirm)
                 result['confirmWhen'] = 'Run only after reviewing these files and existing permission for their full text to be processed by the configured provider.'
     except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as error:
-        # Do not expose provider stderr, credentials, source passages or cache bodies.
-        result = {'status': 'error', 'reason': str(error) if isinstance(error, ValueError) and not isinstance(error, json.JSONDecodeError) else type(error).__name__}
-    add_hints(result)
-    result.setdefault('nextAction', NEXT.get(result['status'], 'record-unresolved'))
-    if 'message' in result:
-        result = {'message': result.pop('message'), **result}
+        result = error_result(error)
+    result = finish(result)
     print(json.dumps(result))
     return 1 if result['status'] == 'error' else 0
 
