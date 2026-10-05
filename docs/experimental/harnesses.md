@@ -1,6 +1,6 @@
-# Where super-jev's doors land on other harnesses
+# Where Super Clef's doors land on other harnesses
 
-super-jev's three doors are: the **reply gate** (checks a draft reply against
+Super Clef's three doors are: the **reply gate** (checks a draft reply against
 evidence before it goes out), the **worker-report verify** (checks a
 sub-agent's finished-work report against evidence the machine collected), and
 the **action permit** (would check a tool call before it runs; today this is a
@@ -113,7 +113,7 @@ Aider has no lifecycle hook API. The closest thing is standard git
 `pre-commit`, which Aider skips by default (`--no-verify`) unless you pass
 `--git-commit-verify`. A general hook system (`post_edit`, `pre_commit`, with
 a `blocking: true` option) is an **open, unimplemented feature request**
-(issue #5712) as of the sources found in this pass. Any super-jev
+(issue #5712) as of the sources found in this pass. Any Super Clef
 integration today would have to wrap the `aider` process externally (watch
 its output stream, diff the working tree after each turn) rather than hook
 into it.
@@ -126,7 +126,7 @@ explicitly match the Claude Code contract: exit 0 allows, exit 2 blocks
 open on Stop), any other non-zero exit is a non-blocking error that's
 logged but does not stop the operation. Hooks can also be agent-delegated
 (`type="agent"`) instead of shell scripts. This is the most direct structural
-match for porting super-jev's three doors as-is.
+match for porting Super Clef's three doors as-is.
 Source: [docs.openhands.dev/sdk/guides/hooks](https://docs.openhands.dev/sdk/guides/hooks) (verified).
 
 ### Cline — verified

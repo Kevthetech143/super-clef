@@ -126,7 +126,7 @@ provider's preview terms restrict publishing performance numbers here.
    earned.
    Status: LIVE — this is the `skills/super-jev` skill in this repo.
 
-8. **JEV'S VOICE** — on a miss, Super Jev prints one fixed line ("Super Jev: I
+8. **JEV'S VOICE** — on a miss, Super Clef prints one fixed line ("Super Clef: I
    didn't have this. Want me to find it by hand and save it for next time?"); a pre-reply
    check re-adds it if the agent drops it; on yes, the agent finds the
    answer and runs `--add` with `--source`. Hits stay silent.
@@ -144,7 +144,7 @@ provider's preview terms restrict publishing performance numbers here.
     Jev one yes/no question; clear cases stay rule-only, free and instant.
     Status: pending.
 
-11. **BRAIN SWAP** — let Super Jev run on other Jev-like models (first
+11. **BRAIN SWAP** — let Super Clef run on other Jev-like models (first
     candidate CLM-8B, Apache 2.0, needs Linux + NVIDIA GPU host). Plan: a
     small ClmEvaluator adapter behind the existing Evaluator interface plus
     an env switch; benchmark vs Jev on a held-out question set (right-first,

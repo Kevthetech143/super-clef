@@ -1,4 +1,4 @@
-# Wiring Super Jev into Claude Code
+# Wiring Super Clef into Claude Code
 
 ## 1. The retrieval rule card
 
