@@ -155,7 +155,9 @@ def test_no_key_and_no_provider_falls_back_local_with_a_note(release):
     (rel / "skills/skill-search/deploy/local-key-provider.py").unlink(missing_ok=True)
     rc, out, err = dispatch(rel, {**env, "TYPESAFE_API_KEY": ""}, "--request", "x")
     assert rc == 0 and one_json(out)["status"] == "suggestions"
-    assert "no TypeSafe key" in err
+    assert "no TypeSafe key" not in err   # quiet by default
+    rc, out, err = dispatch(rel, {**env, "TYPESAFE_API_KEY": "", "SKILL_SEARCH_VERBOSE": "1"}, "--request", "x")
+    assert "no TypeSafe key" in err       # shown only when verbose
 
 
 def test_a_provider_the_machine_ships_is_still_used(release):
@@ -186,7 +188,7 @@ def test_missing_runtime_is_an_error_not_a_fallback(release):
 
 def test_no_credential_provider_goes_local_only_and_says_so(release):
     rel, env, _ = release
-    env = {**env, "TYPESAFE_API_KEY": ""}
+    env = {**env, "TYPESAFE_API_KEY": "", "SKILL_SEARCH_VERBOSE": "1"}
     env.pop("SKILL_SEARCH_PROVIDER_CMD", None)
     hook = rel / "skills/skill-search/deploy/hook-wrapper.sh"
     r = subprocess.run(["bash", str(hook), "--request-file", "r.json"], capture_output=True, text=True, env=env)
@@ -314,6 +316,7 @@ def test_no_key_falls_back_to_local_only_with_one_note(release):
     """Gap E: ranked search with no TypeSafe key is a local-only answer plus a one-line note, not an error."""
     rel, env, log = release
     env = {k: v for k, v in env.items() if k != "TYPESAFE_API_KEY"}
+    env["SKILL_SEARCH_VERBOSE"] = "1"
     rc, out, err = dispatch(rel, env, "--request", "print a label")
     assert rc == 0 and one_json(out)["status"] == "suggestions"
     assert (log / "entries").read_text().split() == [str(rel / "src/skill-search-cli.ts")]
@@ -326,7 +329,7 @@ def test_failing_key_provider_also_falls_back_local(release, tmp_path):
     bad.write_text("#!/bin/sh\nexit 1\n")
     bad.chmod(0o755)
     env = {k: v for k, v in env.items() if k != "TYPESAFE_API_KEY"}
-    rc, out, err = dispatch(rel, {**env, "SKILL_SEARCH_PROVIDER_CMD": str(bad)}, "--request", "x")
+    rc, out, err = dispatch(rel, {**env, "SKILL_SEARCH_PROVIDER_CMD": str(bad), "SKILL_SEARCH_VERBOSE": "1"}, "--request", "x")
     assert rc == 0 and one_json(out)["status"] == "suggestions" and "no TypeSafe key" in err
 
 
