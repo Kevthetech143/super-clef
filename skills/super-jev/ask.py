@@ -200,6 +200,7 @@ import watched  # noqa: E402
 from prepare_bulk import (KIND_VALUES, STATUS_VALUES, DATE_RE, validate_labels, label_bracket, has_secret,  # noqa: E402
                           payload_has_secret, path_has_secret, redact_path_secrets, clean_text)
 import auto_heal  # noqa: E402
+import dispatch  # noqa: E402
 import judges  # noqa: E402
 import toc_search  # noqa: E402
 import judge_profile  # noqa: E402
@@ -239,6 +240,14 @@ def memory(req: dict) -> dict:
     # Every memory request (navigate, search, cached, add ...) goes through here: one scan.
     if payload_has_secret(req):
         raise SecretHeld("memory request contains a secret; not sent")
+    try:
+        # In this process: a Python start-up per memory call cost ~0.4 s each, several times an ask.
+        out = dispatch.run_memory(SKILL.parent, json.loads(json.dumps(req)))
+    except Exception as e:
+        return {"status": "error", "raw": type(e).__name__}
+    if out is not None:
+        return out
+    # A custom memory.sh whose config this cannot read: only its own process can answer.
     r = subprocess.run([sys.executable, str(SKILL), "memory", "--input", "/dev/stdin"], input=json.dumps(req), capture_output=True, text=True)
     try:
         return json.loads(r.stdout)
@@ -1822,14 +1831,73 @@ def connector_names(ptr: str) -> list:
     return (auto_heal._report_for(ptr, prepare_bulk.CACHE_DIR)[0] or {}).get("names") or []
 
 
-def edited_readable(path: str, ptr: str, entry, raw: bytes, text: str) -> bool:
+SCAN_CACHE_FILE = "secret-scan.json"
+_SCAN = {"path": None, "rows": {}, "dirty": False, "fp": None}
+
+
+def _scan_fingerprint() -> str:
+    """Identity of the secret rules (their code and patterns): a verdict kept under another one is not reused."""
+    if _SCAN["fp"] is None:
+        h = hashlib.sha256()
+        for name in ("prepare_bulk.py", "toc_search.py", "secret_patterns.json"):
+            h.update((Path(__file__).resolve().parent / name).read_bytes())
+        _SCAN["fp"] = h.hexdigest()[:16]
+    return _SCAN["fp"]
+
+
+def use_scan_cache(principal: str) -> None:
+    """Point the secret-verdict cache at this principal's state dir (secret-scan.json)."""
+    path = str(state_dir(principal) / SCAN_CACHE_FILE)
+    if _SCAN["path"] == path:
+        return
+    flush_scan_cache()
+    rows = {}
+    try:
+        saved = json.loads(Path(path).read_text())
+        if saved.get("fingerprint") == _scan_fingerprint() and isinstance(saved.get("files"), dict):
+            rows = saved["files"]
+    except (OSError, ValueError, AttributeError):
+        pass
+    _SCAN.update(path=path, rows=rows, dirty=False)
+
+
+def flush_scan_cache() -> None:
+    if not (_SCAN["path"] and _SCAN["dirty"]):
+        return
+    path = Path(_SCAN["path"])
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps({"fingerprint": _scan_fingerprint(), "files": _SCAN["rows"]}))
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+        _SCAN["dirty"] = False
+    except OSError:
+        pass  # a cache that cannot be written only costs the next ask its scan
+
+
+def text_can_leave(path: str, raw: bytes, text: str, sha=None) -> bool:
+    """clean_text(text, path) is not None, remembered once per file content (`sha`, else hashed here, and type, which the
+    section split depends on) so an unchanged edited file is not scanned again. Holds no file text."""
+    key = f"{sha or hashlib.sha256(raw).hexdigest()}:{Path(path).suffix.lower()}"
+    known = _SCAN["rows"].get(key)
+    if isinstance(known, bool):
+        return known
+    verdict = clean_text(text, path) is not None
+    if _SCAN["path"]:
+        _SCAN["rows"][key] = verdict
+        _SCAN["dirty"] = True
+    return verdict
+
+
+def edited_readable(path: str, ptr: str, entry, raw: bytes, text: str, sha=None) -> bool:
     """May a reviewed file edited since connect be read at its current text while its pointer
     waits on the refresh? Only as a refresh would admit it: reviewed at a known version and not
     failed by its last review, under the size ceiling, no secret-looking line, and still inside
     the pointer's recorded scope."""
     return (isinstance(entry, dict) and bool(entry.get("pass")) and bool(entry.get("sha256"))
             and len(raw) <= prepare_bulk.CEILING_BYTES
-            and clean_text(text, path) is not None
+            and text_can_leave(path, raw, text, sha)
             and (bool(entry.get("local")) or refresh_would_admit(path, ptr)))  # a local row's scope is the set's listed files
 
 
@@ -1876,6 +1944,7 @@ def _engine_sha_hook(memo):
 
 
 def flush_stat_memo() -> None:
+    flush_scan_cache()
     if _ACTIVE_MEMO[0] is not None:
         _ACTIVE_MEMO[0].flush()
 
@@ -1940,7 +2009,7 @@ def toc_corpus(cands, reads, fb_paths=None) -> dict:
             corpus[tpath] = (tptr, tentry)
             continue
         tgot = read_sha(tpath, reads)
-        if tgot and edited_readable(tpath, tptr, tentry, tgot[0], tgot[0].decode("utf-8", "replace")):
+        if tgot and edited_readable(tpath, tptr, tentry, tgot[0], tgot[0].decode("utf-8", "replace"), tgot[1]):
             corpus[tpath] = (tptr, tentry)
     return corpus
 
@@ -1964,10 +2033,10 @@ def edited_held(pointers: list, exclude=(), reads=None) -> dict:
             continue
         raw = got[0]
         text = raw.decode("utf-8", "replace")
-        if edited_readable(path, ptr, entry, raw, text):
+        if edited_readable(path, ptr, entry, raw, text, got[1]):
             done.add(path)
             continue
-        why.setdefault(path, "secret" if clean_text(text, path) is None else "stuck" if (
+        why.setdefault(path, "secret" if not text_can_leave(path, raw, text, got[1]) else "stuck" if (
             len(raw) > prepare_bulk.CEILING_BYTES or not refresh_would_admit(path, ptr)) else "refresh")
     flush_stat_memo()
     out = {"secret": [], "stuck": [], "refresh": []}
@@ -2949,6 +3018,7 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
     # question; the content check still decides what is kept.
     out_of_scope = {p for ptr in search_pointers for p in load_cache_files(ptr) if other_person(p)}
     reads = {}  # one read+sha pass shared by edited_held and word_search
+    use_scan_cache(principal)
     use_stat_memo(principal)  # ...and a stat-keyed memo across asks: an unchanged file is not re-read
     edited = edited_held(search_pointers, out_of_scope, reads)  # once per searched set, not per search path
     held_cover = {}  # a held file's word coverage of the question, from the same word-search pass

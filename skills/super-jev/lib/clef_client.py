@@ -116,11 +116,42 @@ def _control_dir(base=None, short=None):
     return cm
 
 
+CONTROL_PERSIST = "4h"  # idle time the opening ask leaves the master up: a pause of minutes must not cost a new login
+HOST_MARK = "cm-superclef-host"
+
+
+def _drop_old_master(cm, target):
+    """A master kept for hours must not outlive a change of host: when the host this folder last served is not
+    `target`, close that host's master (ssh -O exit talks only to the local socket) and record `target`."""
+    mark = os.path.join(cm, HOST_MARK)
+    try:
+        with open(mark) as f:
+            old = f.read().strip()
+    except OSError:
+        old = ""
+    if old == target:
+        return
+    if old:
+        try:
+            subprocess.run(["ssh", "-o", f"ControlPath={cm}/cm-superclef-%C", "-O", "exit", old],
+                           capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    try:
+        fd = os.open(mark, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(target)
+    except OSError:
+        pass
+
+
 def _ssh_cmd(remote):
     cm = _control_dir()
+    target = host()
+    _drop_old_master(cm, target)
     return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15",
-            "-o", "ControlMaster=auto", "-o", f"ControlPath={cm}/cm-superclef-%C", "-o", "ControlPersist=600",
-            host(), remote]
+            "-o", "ControlMaster=auto", "-o", f"ControlPath={cm}/cm-superclef-%C", "-o", f"ControlPersist={CONTROL_PERSIST}",
+            target, remote]
 
 
 def _exec(cmd, body, timeout):

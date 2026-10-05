@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """One small dispatcher over the installed Super Jev tools; no judging logic."""
 import json
+import importlib.util
 import os
+import re
 import shlex
 from pathlib import Path
 import subprocess
@@ -32,6 +34,61 @@ def config_path() -> Path:
 
 class NotSetUp(FileNotFoundError):
     """Raised when memory is used before setup.py has written its config."""
+
+
+def _wrapper_in_use(skill_dir: Path, args: list[str]) -> bool:
+    """True when `memory` would go through the installed memory.sh (which supplies repo and config)."""
+    return (not os.environ.get("SUPERJEV_REPO") and "--config" not in args
+            and not any(arg.startswith("--config=") for arg in args)
+            and not os.environ.get("SUPERJEV_MEMORY_WRAPPER_ACTIVE") and (skill_dir / "memory.sh").is_file())
+
+
+_CLI_MODULES: dict = {}
+
+
+def run_memory(skill_dir: Path, req: dict):
+    """The memory action `req` answered in this process: the result dict `dispatch.py memory --input` would
+    print, or None when only a subprocess can answer (memory.sh is a custom wrapper whose --config this cannot
+    read). Same repo, config and error answers as command(); the one difference is no Python start-up."""
+    wrapped = _wrapper_in_use(skill_dir, [])
+    if wrapped:
+        wrapper = skill_dir / "memory.sh"
+        body = wrapper.read_text()
+        found = re.search(r"--config[ =]+(?:\"([^\"]+)\"|'([^']+)'|(\S+))", body)
+        if not found or "$" in "".join(g or "" for g in found.groups()):
+            return None
+        # The wrapper's repo is "$DIR/../.."; any other SUPERJEV_REPO it exports is one only its process honours.
+        if any("$DIR/../.." not in line for line in re.findall(r"SUPERJEV_REPO=(.*)", body)):
+            return None
+        repo, config = (skill_dir / ".." / "..").resolve(), next(g for g in found.groups() if g)
+    else:
+        repo = Path(os.environ["SUPERJEV_REPO"]) if os.environ.get("SUPERJEV_REPO") else Path(__file__).resolve().parents[2]
+        config = str(config_path())
+    entry = repo / "experiments/verified-pointer-memory/cli.py"
+    if wrapped and not entry.is_file():
+        return None  # let the wrapper's own process report it
+    try:
+        if not entry.is_file():
+            raise MissingDependency(str(entry))
+        if not Path(config).is_file() and not wrapped:
+            raise NotSetUp(str(config))
+    except NotSetUp as exc:
+        return {"status": "error", "reason": "not-set-up",
+                "message": "Super Jev is not set up yet. Run: python3 skills/super-jev/setup.py",
+                "missingConfig": str(exc)}
+    except MissingDependency as exc:
+        return {"status": "error", "reason": "missing-dependency", "dependency": str(exc),
+                "nextAction": "configure-memory-runtime",
+                "hint": "Memory needs the Super Jev repository runtime first. Set SUPERJEV_REPO to its checkout (containing experiments/verified-pointer-memory/cli.py), or repair the installed memory.sh wrapper. Then run memory --describe; data queries also need a reviewed dataset and memory config.",
+                "helpCommand": "help --topic register-setup"}
+    cli = _CLI_MODULES.get(entry)
+    if cli is None:
+        if str(entry.parent) not in sys.path:
+            sys.path.append(str(entry.parent))  # cli.py imports its sibling service.py
+        spec = importlib.util.spec_from_file_location("_verified_pointer_cli", entry)
+        cli = _CLI_MODULES[entry] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cli)
+    return json.loads(json.dumps(cli.handle(req, config)))
 
 
 def command(skill_dir: Path, tool: str, args: list[str]) -> list[str]:
