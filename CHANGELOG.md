@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A saved answer or an assisted ask no longer fails at random with "memory request contains a secret; not sent". The engine's `ticket` and `attemptId` (uuid4) were scanned as user text, and about 1 uuid in 8,000 ends in 12 digits that read as a Luhn-valid card; both keys now count as tool-built fields (`MACHINE_KEYS`, Python and Node, kept identical). Real cards in user text are still held. Tests: `skills/super-jev/tests/test_hash_false_hold.py`, `test/secret-scan.test.ts`.
+
 - **`ask` hands all its stale sets to the heal side in one call** (`heal_in_background_many`): one state-lock step, at most one engine read (new `recipes` action) and at most one background drain per ask, however many sets are stale. It was one call each, about 1.4 s per stale set. Statuses and honest wording are unchanged (only a real start says refreshing); a failed recipe replay now says the last refresh failed instead of cooling down.
 
 ## 0.3.2
