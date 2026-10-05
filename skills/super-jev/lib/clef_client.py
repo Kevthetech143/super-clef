@@ -17,12 +17,12 @@ window (TooBig) and never truncates it.
 Warm path (default): a small daemon on the clef machine (lib/clefd.py) loads clef-flash once and serves calls over a
 unix socket in the user's 0700 ~/.clefd, reached through one persistent ssh ControlMaster connection. It is
 started on first need (its source is piped over ssh, nothing is copied to the clef machine), exits after an idle
-timeout (SUPERJEV_CLEF_IDLE, default 600 s) and frees the model. Each call still writes its payload to a
+timeout (SUPERJEV_CLEF_IDLE, default 7200 s = 2 h) and frees the model. Each call still writes its payload to a
 mktemp dir that a trap removes. If the daemon cannot start or answer, the call stops it and falls back to the
 one-shot path above, so a warm failure costs time, never a verdict.
 
 Env: SUPERJEV_CLEF_HOST (required, the ssh target, e.g. user@clef-host), SUPERJEV_CLEF_DIR (default ~/clef-test on that machine),
-SUPERJEV_CLEF_WARM (default 1; 0 = always one-shot), SUPERJEV_CLEF_IDLE (default 600).
+SUPERJEV_CLEF_WARM (default 1; 0 = always one-shot), SUPERJEV_CLEF_IDLE (default 7200; the resident model is about 4 GB).
 """
 import json
 import os
@@ -51,7 +51,19 @@ REMOTE_DIR = os.environ.get("SUPERJEV_CLEF_DIR", "~/clef-test")
 MARK = "CLEFJSON:"
 LOCK_WAIT_SECS = 240
 WARM = os.environ.get("SUPERJEV_CLEF_WARM", "1") != "0"
-IDLE_SECS = int(os.environ.get("SUPERJEV_CLEF_IDLE", "600") or 600)
+DEFAULT_IDLE_SECS = 7200  # a cold start costs about 4.5 s; the warm daemon holds about 4 GB on the clef machine
+
+
+def _idle_secs(raw):
+    """The daemon idle window in seconds: the setting when it is a whole number of at least 60, else the default."""
+    try:
+        n = int(str(raw).strip())
+    except ValueError:
+        return DEFAULT_IDLE_SECS
+    return n if n >= 60 else DEFAULT_IDLE_SECS
+
+
+IDLE_SECS = _idle_secs(os.environ.get("SUPERJEV_CLEF_IDLE", ""))
 NO_DAEMON = 78  # exit code of the warm call when nothing is listening
 
 # Runs on the clef machine under the lock. stdin is the request body; it is read once into a temp file that the
