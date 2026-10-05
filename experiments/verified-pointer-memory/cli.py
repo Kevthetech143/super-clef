@@ -192,9 +192,11 @@ def load_config(path):
     # allowAgentAssist: retired (saving is decided by ask.py's checks); configs written
     # before its removal still carry it, so it is accepted and ignored.
     unknown = set(config) - {'db', 'registry', 'retrievalCommand', 'navigationCommand',
-                             'allowAgentAssist', *DEFAULTS}
+                             'allowAgentAssist', 'indexRead', *DEFAULTS}
     if unknown:
         raise ValueError('Unsupported configuration setting.')
+    if 'indexRead' in config and not isinstance(config['indexRead'], bool):
+        raise ValueError('indexRead must be true or false.')  # read by ask.py: false turns the file index off
     config.pop('allowAgentAssist', None)
     for name in ('db', 'registry'):
         p = Path(config[name]).expanduser()

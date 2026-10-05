@@ -23,9 +23,11 @@ Super Clef keeps its own state in `~/.local/state/super-clef` (override: `SUPERC
 
 Set any of these as `SUPERCLEF_X`. Setups from before the rename may still use `SUPERJEV_X`; that name keeps working, and when both are set, `SUPERCLEF_X` wins. The skill folders are still named `skills/super-jev/...` (folder name kept for now); where a command below needs a path, type it as shown.
 
-`STATE_DIR`, `PRINCIPAL`, `CLEF_HOST`, `CLEF_DIR`, `JUDGE`, `BIN_DIR`, `INSTALL_DIR`, `REPO_URL`, `SAVE_AFTER`, `AUTO_CACHE`, `PRIVATE_DIRS`, `GATE_CMD`, `NEW_FILE_SCAN`, `CLEF_IDLE`, `CLEF_WARM`.
+`STATE_DIR`, `PRINCIPAL`, `CLEF_HOST`, `CLEF_DIR`, `JUDGE`, `BIN_DIR`, `INSTALL_DIR`, `REPO_URL`, `SAVE_AFTER`, `AUTO_CACHE`, `PRIVATE_DIRS`, `GATE_CMD`, `NEW_FILE_SCAN`, `CLEF_IDLE`, `CLEF_WARM`, `INDEX`.
 
 The warm judge holds about 4.6 GB on the clef machine for the idle window (default 2 h); on a machine that also runs other models, lower `SUPERCLEF_CLEF_IDLE` or set `SUPERCLEF_CLEF_WARM=0`.
+
+`SUPERCLEF_INDEX=0` (or `off`, `false`, `no`) turns the file index off: every ask then reads and hashes its files as before. Unset means on: the first ask after a connect builds a per-principal index in the background, and later asks read only the best-matching files from it (an ask never waits for the build). A set the index does not hold yet is searched the old way in the same ask. The engine config key `"indexRead": false` does the same.
 
 ## Setup: the judge host
 

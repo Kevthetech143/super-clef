@@ -561,6 +561,8 @@ def reconnect_recipe(pointer: str, principal: str, memory=None) -> str:
     elif result == "reconnected":
         with _state_txn(principal) as st:
             st["held"].pop(pointer, None)
+        from prepare_bulk import kick_index_updater  # a new generation: the file index is behind for this set until it syncs
+        kick_index_updater([principal])
     # A pointer another lookup queued meanwhile must survive: drain that queue or release.
     _hand_off(principal, pointer, token)
     _log(principal=principal, pointer=pointer, action="reconnect-recipe", result=result, reason=reason)
