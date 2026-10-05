@@ -40,13 +40,13 @@ def test_unreachable_judge_says_how_to_set_the_host(env, capsys, monkeypatch):
     monkeypatch.setattr(setup, "_judge_reachable", lambda host: False)
     rc, out = run(capsys)
     assert rc == 1 and "NOT READY" in out
-    assert "judge@example-host did not answer ssh" in out and "SUPERJEV_CLEF_HOST=user@clef-host" in out
+    assert "judge@example-host did not answer ssh" in out and "SUPERCLEF_CLEF_HOST=user@clef-host" in out and "SUPERJEV" not in out
 
 
 def test_unset_judge_host_says_how_to_set_it(env, capsys, monkeypatch):
     monkeypatch.delenv("SUPERJEV_CLEF_HOST")
     rc, out = run(capsys)
-    assert rc == 1 and "judge host is not set" in out and "export SUPERJEV_CLEF_HOST=" in out
+    assert rc == 1 and "judge host is not set" in out and "export SUPERCLEF_CLEF_HOST=" in out
 
 
 def test_ready_message_points_at_superclef_connect(env, capsys):

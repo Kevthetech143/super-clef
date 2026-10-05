@@ -2,7 +2,7 @@
 
 Your agent asks in its own words; Super Clef finds the file in your connected notes, checks the claim, and remembers what you approved. The judge is Cloudflare **clef-flash** (Apache-2.0, 4-bit) running on a second Apple-silicon machine reached over ssh. It has its own terminal app, and makes no paid judge calls and needs no TypeSafe key.
 
-Status: v0.3.0. The reference manual below covers every command; where it says Jev, read "the judge" (see "How the clef judge works").
+Status: v0.3.0. The reference manual below covers every command; "the judge" means the clef model that checks your questions and claims (see "How the clef judge works").
 
 ## Use it
 
@@ -21,13 +21,13 @@ Super Clef keeps its own state in `~/.local/state/super-clef` (override: `SUPERC
 
 ## Environment names
 
-Set any of these as `SUPERCLEF_X`. The older `SUPERJEV_X` name still works; when both are set, `SUPERCLEF_X` wins.
+Set any of these as `SUPERCLEF_X`. Setups from before the rename may still use `SUPERJEV_X`; that name keeps working, and when both are set, `SUPERCLEF_X` wins. The skill folders are still named `skills/super-jev/...` (folder name kept for now); where a command below needs a path, type it as shown.
 
-`STATE_DIR`, `PRINCIPAL`, `CLEF_HOST`, `CLEF_DIR`, `JUDGE`, `BIN_DIR`, `INSTALL_DIR`, `REPO_URL`, `SAVE_AFTER`, `AUTO_CACHE`.
+`STATE_DIR`, `PRINCIPAL`, `CLEF_HOST`, `CLEF_DIR`, `JUDGE`, `BIN_DIR`, `INSTALL_DIR`, `REPO_URL`, `SAVE_AFTER`, `AUTO_CACHE`, `PRIVATE_DIRS`, `GATE_CMD`, `NEW_FILE_SCAN`.
 
 ## Setup: the judge host
 
-The clef judge runs on a second Apple-silicon machine reached over ssh (key login, `BatchMode`). There is no default host: set `SUPERCLEF_CLEF_HOST` to its ssh target (for example `user@clef-host`) before using Super Clef; without it every judge call stops with an error naming that variable. Optional: `SUPERCLEF_CLEF_DIR` (the clef folder on that machine, default `~/clef-test`). For the live scripts also set `EVALSET` (eval jsonl); `scripts/head-to-head.sh` also needs `OUT`, `WORK` and `JEV_STATE_DIR`. `SUPERJEV_PRIVATE_DIRS` (colon-separated) lists folders the media door must never read.
+The clef judge runs on a second Apple-silicon machine reached over ssh (key login, `BatchMode`). There is no default host: set `SUPERCLEF_CLEF_HOST` to its ssh target (for example `user@clef-host`) before using Super Clef; without it every judge call stops with an error naming that variable. Optional: `SUPERCLEF_CLEF_DIR` (the clef folder on that machine, default `~/clef-test`). For the live scripts also set `EVALSET` (eval jsonl); `scripts/head-to-head.sh` also needs `OUT`, `WORK` and `JEV_STATE_DIR`. `SUPERCLEF_PRIVATE_DIRS` (colon-separated) lists folders the media door must never read.
 
 ## Prepare the judge machine
 
@@ -47,13 +47,13 @@ One-time setup on the second Apple-silicon machine. The steps follow how our own
    ```
    The source is the Hugging Face repo `mlx-community/clef-flash-4bit`: a 4-bit MLX conversion of `Cloudflare/clef-flash`. Its model card states `license: apache-2.0`. The download is 15 files and the loader `clef_mlx.py` comes inside the model folder, so there is nothing else to copy. Clef is not a chat model: only that loader runs it.
 4. Check it from the judge machine, with the example from the model card (`cd ~/clef-test`, `sys.path.insert(0, "model4")`, `import clef_mlx`, `clef_mlx.load("model4").systemone({...})`; the full example is in `model4/README.md`). It should print per-question answers with probabilities.
-5. Check it from this Mac: `export SUPERJEV_CLEF_HOST=user@clef-host`, then `npm run e2e:clef` with `EVALSET` set (see above). It asks 2 questions and fails if nothing comes back or if payload files are left on the judge machine.
+5. Check it from this Mac: `export SUPERCLEF_CLEF_HOST=user@clef-host`, then `npm run e2e:clef` with `EVALSET` set (see above). It asks 2 questions and fails if nothing comes back or if payload files are left on the judge machine.
 
 Not verified by me: step 4 and 5 were not re-run for this section (the model is loaded by other jobs on the live machine); the folder and package facts above were read from the live machine.
 
 ## How the clef judge works
 
-- **Judge**: profile `clef` (default) in `skills/super-jev/judge_profiles.json`, behind the same judge seam (`judges.ask`). `lib/clef_client.py` pipes one short package over `ssh` to the clef directory (`SUPERCLEF_CLEF_DIR`, default `~/clef-test`) on a second Apple-silicon machine reached over ssh (`.venv/bin/python`, `clef_mlx`), under a lock so only one clef process runs at a time. The payload goes to a temp dir on the clef machine that a trap deletes after every call, success or failure. `SUPERCLEF_JUDGE=typesafe-jev` selects the hosted Jev judge instead.
+- **Judge**: profile `clef` (default) in `skills/super-jev/judge_profiles.json`, behind the same judge seam (`judges.ask`). `lib/clef_client.py` pipes one short package over `ssh` to the clef directory (`SUPERCLEF_CLEF_DIR`, default `~/clef-test`) on a second Apple-silicon machine reached over ssh (`.venv/bin/python`, `clef_mlx`), under a lock so only one clef process runs at a time. The payload goes to a temp dir on the clef machine that a trap deletes after every call, success or failure. `SUPERCLEF_JUDGE=typesafe-jev` selects the hosted TypeSafe judge instead.
 - **Short package** (harness report, shape A: pick one file or none): at most 4 files, each cut to about 120 tokens around the question's words, one question, about 600 tokens, 6-7 s on the M1 plus 3 s model load. The free shortlist (word search plus an idf-ranked table-of-contents list) replaces a table-of-contents pick.
 - **Trust**: clef's "none", and any pick above 0.9, are low trust (it is overconfident when the answer is absent). Those files are listed as possible with a note, never confirmed, and are never saved automatically. A claim check is a lead: TRUE/FALSE carries a "confirm in the proof file" line and is not cached.
 - **Your files**: `superclef connect <folder>` connects a folder of notes; `superclef disconnect <name>` forgets it (the originals are never touched). Connected sets are read in place; no file contents leave this Mac except the per-question package.
@@ -72,28 +72,28 @@ npm run e2e:clef         live: imports state, asks 2 questions from your eval js
 # Reference manual
 
 
-One judge (Jev) between your agent and your data: the agent asks in its own words, Super Clef finds the file, checks the claim, permits the action, and remembers what you approved. Your agent stays responsible for the answer.
+One judge between your agent and your data: the agent asks in its own words, Super Clef finds the file, checks the claim, permits the action, and remembers what you approved. Your agent stays responsible for the answer.
 
 ## Vision
 
-- One judge sits between your agent and your data: the agent asks in its own words, Jev finds the file, checks the claim, permits the action, and remembers what you approved. Your agent stays responsible for the answer.
-- Agents burn whole LLM turns on lookups, re-hunt the same answers daily, and state things the files never said. Jev is a fast, cheap judge for yes/no and which-one questions; the LLM keeps the writing.
+- One judge sits between your agent and your data: the agent asks in its own words, Super Clef finds the file, checks the claim, permits the action, and remembers what you approved. Your agent stays responsible for the answer.
+- Agents burn whole LLM turns on lookups, re-hunt the same answers daily, and state things the files never said. The judge is a fast, cheap model for yes/no and which-one questions; the LLM keeps the writing.
 - The daily loop: ask → read the top file → answer → approve / miss / add. Connectors are how your data gets in; the cache fills only from your own approvals — nothing is cached that you did not approve.
 - 1.0 promises the proven core: skill search, file navigate, connect + bulk prepare, check gate, permit gate, the harness loop. The core works well when it works; edges still want an agent in the seat — see KNOWN-QUIRKS.md and AGENTS.md.
-- 1.0 does not promise unattended answering, semantic cache matching, automatic sync, or live browsing. Next: auto-catch, recipes, a Jev-decided browser driver — each ships only after its own live bench.
+- 1.0 does not promise unattended answering, semantic cache matching, automatic sync, or live browsing. Next: auto-catch, recipes, a judge-decided browser driver — each ships only after its own live bench.
 
 ## Quick start
 
 People: [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) — the full operating manual.
 Agents: [AGENTS.md](AGENTS.md) — the numbered path and daily loop, plus
 [wire-into-claude-code](docs/wire-into-claude-code.md) for the retrieval rule card and Stop-hook claim gate.
-At a terminal: `npm run clef` opens the app ([docs/jev-cli.md](docs/jev-cli.md)). No key yet? `npm run demo` runs the loop once offline.
+At a terminal: `npm run clef` opens the app ([docs/terminal-app.md](docs/terminal-app.md)). No key yet? `npm run demo` runs the loop once offline.
 
 ## The loop
 
 `ask` → read the top file yourself → answer → `--miss` a bad saved one, `--add` a fact that has no file. A question you ask again saves itself.
 
-Auto-save: when the same file wins the same question for you N times in a row (`SUPERJEV_SAVE_AFTER`, default 2) on complete searches (a partial search neither counts nor resets) and passes the content check, the ranked list from the winning search is saved (up to 5 files, not an answer; the N wins are the evidence, so no extra claim check, and the secret scan and unchanged-file check still run; marked `approved_by: auto-save`); the next ask returns the whole list at once, in rank order, labelled saved, with no search, and you open the files; if any listed file changed it is withheld as STALE and searched live. Secret-held files are not saved, and a changed file is withheld as STALE; it says why. Opt out with `--no-auto` or `SUPERJEV_AUTO_CACHE=0`. `--approve` meets the threshold at once (`approved_by: principal:NAME`). Every cache hit prints who approved it, and `--miss` on a cached question un-saves it. Matching is the same question after lowercasing, collapsing spaces and dropping trailing punctuation; nothing fuzzier. A saved answer lasts until its source file changes, with no clock expiry. Connectors are how data gets in: onboard a folder once, and it stays answerable.
+Auto-save: when the same file wins the same question for you N times in a row (`SUPERCLEF_SAVE_AFTER`, default 2) on complete searches (a partial search neither counts nor resets) and passes the content check, the ranked list from the winning search is saved (up to 5 files, not an answer; the N wins are the evidence, so no extra claim check, and the secret scan and unchanged-file check still run; marked `approved_by: auto-save`); the next ask returns the whole list at once, in rank order, labelled saved, with no search, and you open the files; if any listed file changed it is withheld as STALE and searched live. Secret-held files are not saved, and a changed file is withheld as STALE; it says why. Opt out with `--no-auto` or `SUPERCLEF_AUTO_CACHE=0`. `--approve` meets the threshold at once (`approved_by: principal:NAME`). Every cache hit prints who approved it, and `--miss` on a cached question un-saves it. Matching is the same question after lowercasing, collapsing spaces and dropping trailing punctuation; nothing fuzzier. A saved answer lasts until its source file changes, with no clock expiry. Connectors are how data gets in: onboard a folder once, and it stays answerable.
 
 ## Maturity
 
@@ -155,7 +155,7 @@ Removes everything Super Clef wrote: the state directory (`$SUPERCLEF_STATE_DIR`
 `~/.local/state/super-clef`: the memory config, connected pointers, cached answers and
 logs), `skills/super-jev/prepare-cache/`, `ledger/` and `autoheal-state/` in this
 checkout, an older app's config (`~/.config/superjev/config.json`, which held the key),
-`~/.local/bin/superjev` if `install.sh` made it for this checkout, and any
+`~/.local/bin/superjev` (the old launcher name) if `install.sh` made it for this checkout, and any
 `~/.claude/skills` links that point into this checkout. It deletes only the names Super Clef
 writes in each folder; a file of yours in the same folder stays, and the output lists it.
 It keeps `~/.typesafe-api-key`, your key file (hooks and agents read it too): delete it
@@ -180,7 +180,7 @@ folder to remove the code.
 
 - auto-catch: approved hits kept without a manual command.
 - recipes: cache the how, run it live.
-- browser driver: Jev decides, with an action permit before every click.
+- browser driver: the judge decides, with an action permit before every click.
 
 ## Help us: report a miss
 

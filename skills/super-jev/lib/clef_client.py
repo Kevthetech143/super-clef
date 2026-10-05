@@ -32,6 +32,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import superclef_env  # noqa: E402,F401  (SUPERCLEF_* -> SUPERJEV_*, so this file works run directly)
 from judge_profile import PROFILE, judge_tokens as estimate_tokens  # noqa: E402
 from judges.errors import BadReply, TooBig, Unreachable, SecretBlocked  # noqa: E402
 
@@ -41,7 +42,7 @@ def host():
     """The ssh target of the judge machine. Required: there is no default."""
     h = os.environ.get("SUPERJEV_CLEF_HOST", "").strip()
     if not h:
-        raise Unreachable("SUPERJEV_CLEF_HOST is not set: set it to the ssh target of the machine that runs clef, e.g. user@clef-host")
+        raise Unreachable("SUPERCLEF_CLEF_HOST is not set: set it to the ssh target of the machine that runs clef, e.g. user@clef-host")
     return h
 
 
@@ -92,12 +93,25 @@ def _remote_command():
     return f"sh -c {shlex.quote(script)}"
 
 
-def _ssh_cmd(remote):
-    cm = os.path.expanduser("~/.ssh")
+SOCKET_LIMIT = 100  # sun_path is ~104 bytes; ssh adds a random suffix while it binds, so stay under with room
+
+
+def _control_dir(base=None):
+    """Where the ssh ControlPath socket lives. ~/.ssh/cm-superclef-<%C hash is 40 chars>; when that would not
+    fit a Unix socket path (a long HOME), use a short per-user dir under /tmp instead."""
+    cm = os.path.expanduser("~/.ssh") if base is None else base
+    if len(os.path.join(cm, "cm-superclef-")) + 40 + 17 > SOCKET_LIMIT:
+        cm = f"/tmp/scl-{os.getuid()}"
     try:
         os.makedirs(cm, mode=0o700, exist_ok=True)
+        os.chmod(cm, 0o700)
     except OSError:
         pass
+    return cm
+
+
+def _ssh_cmd(remote):
+    cm = _control_dir()
     return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15",
             "-o", "ControlMaster=auto", "-o", f"ControlPath={cm}/cm-superclef-%C", "-o", "ControlPersist=600",
             host(), remote]
