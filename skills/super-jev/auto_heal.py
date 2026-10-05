@@ -703,6 +703,7 @@ def heal_in_background_many(pointers: list, principal: str, views=()) -> dict:
 
     now, verdict, order = time.time(), {}, []
     token = head = ""
+    reclaimed = False
     with _state_txn(principal) as state:
         recent = [t for t in state["attempts"] if now - t < 3600]
         slots = MAX_PER_HOUR - len(recent)
@@ -731,6 +732,14 @@ def heal_in_background_many(pointers: list, principal: str, views=()) -> dict:
                 slots -= 1
             verdict[owner] = "in-progress"
             order.append(owner)
+        # An item left queued whose lock holder is gone (a drain that ended or died with it still
+        # waiting) is reclaimable: it is served by this ask's drain even when the ask's own sets
+        # only cooled down. Only items that could run now, so a cooling one never respawns a drain.
+        if not order:
+            ready = sorted((v.get("ts", 0), p) for p, v in state["pending"].items()
+                           if _wait_secs(state, p, now) <= 0 and (v.get("kind") != "refresh" or slots > 0))
+            order = [p for _, p in ready]
+            reclaimed = True
         # One drain for the whole batch, unless a refresh or a drain already runs: it heals the queue.
         if order and not _live_locks(principal, "", drains=True):
             head = order[0]
@@ -738,11 +747,15 @@ def heal_in_background_many(pointers: list, principal: str, views=()) -> dict:
     if token:
         try:
             _name_child(principal, head, token, _spawn_detached(_drain_cmd(principal, head, token)))
-            verdict[head] = "started"
+            if reclaimed:
+                _log(principal=principal, pointer=head, action="reclaim")
+            else:
+                verdict[head] = "started"
         except OSError:
             _release_lock(principal, head, token)
             for owner in order:
-                verdict[owner] = "failed"
+                if not reclaimed:
+                    verdict[owner] = "failed"
     for owner, (kind, ptrs) in plan.items():
         _log(principal=principal, pointer=owner, action="batch-heal", kind=kind, result=verdict[owner])
         for ptr in ptrs:
