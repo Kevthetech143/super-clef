@@ -16,7 +16,6 @@ export CLEF_ASK="$ROOT/skills/super-jev/ask.py"
 export JEV_STATE_DIR="${JEV_STATE_DIR:?set JEV_STATE_DIR to the Super Jev state folder}"
 export REUSE="${REUSE:-0}"
 mkdir -p "$WORK"
-if [ "$REUSE" != 1 ]; then node "$ROOT/bin/superclef.js" import-state --from-superjev --json >/dev/null; fi
 exec python3 - <<'PY'
 import json, os, re, statistics, subprocess, time, datetime
 W=os.environ['WORK']; OUT=os.environ['OUT']; REUSE=os.environ['REUSE']=='1'
@@ -95,7 +94,7 @@ def detail(name):
     return '\n'.join(out)
 md=f"""# Super Clef vs Super Jev, head-to-head (private; generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M ET')} by scripts/head-to-head.sh)
 
-Same connected files: Super Clef state is `superclef import-state --from-superjev` (read-only copy). Both run through ask.py --json, one question at a time, sequentially (times are wall clock, cold).
+Same connected files: Super Clef is connected to the same folders with `superclef connect`. Both run through ask.py --json, one question at a time, sequentially (times are wall clock, cold).
 Top-5 hit = a gold file (eval jsonl: gold paths; timing set: gold name fragments) among the first 5 listed files. Super Clef lists clef "possible" leads, never certain on its own.
 The eval jsonl runs with saved answers off (replay) for both; the timing set too, except t4, which is the saved-answer question and reads the saved answer (no auto-save anywhere). Timing q3 is a claim check with no gold file (see its detail row).
 

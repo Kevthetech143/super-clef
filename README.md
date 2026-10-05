@@ -11,7 +11,9 @@ npm run clef                                  open the window (or: node bin/supe
 node bin/superclef.js "your question"        one-shot question
 node bin/superclef.js /check "a statement"    check a statement against your notes
 node bin/superclef.js --version               super-clef 0.2.0
-node bin/superclef.js import-state --from-superjev    get the same connected files Super Jev has
+node bin/superclef.js setup                   check this Mac is ready (one time)
+node bin/superclef.js connect <folder>        connect a folder of notes (.md)
+node bin/superclef.js disconnect <name>       forget a connected folder (your files stay)
 scripts/install-superclef.sh                  put `superclef` on your PATH (~/.local/bin; never touches `superjev`)
 ```
 
@@ -48,8 +50,8 @@ Not verified by me: step 4 and 5 were not re-run for this section (the model is 
 - **Judge**: profile `clef` (default) in `skills/super-jev/judge_profiles.json`, behind the same judge seam (`judges.ask`). `lib/clef_client.py` pipes one short package over `ssh` to the clef directory (`SUPERJEV_CLEF_DIR`, default `~/clef-test`) on a second Apple-silicon machine reached over ssh (`.venv/bin/python`, `clef_mlx`), under a lock so only one clef process runs at a time. The payload goes to a temp dir on the clef machine that a trap deletes after every call, success or failure. `SUPERJEV_JUDGE=typesafe-jev` selects the Jev judge again.
 - **Short package** (harness report, shape A: pick one file or none): at most 4 files, each cut to about 120 tokens around the question's words, one question, about 600 tokens, 6-7 s on the M1 plus 3 s model load. The free shortlist (word search plus an idf-ranked table-of-contents list) replaces Jev's table-of-contents pick.
 - **Trust**: clef's "none", and any pick above 0.9, are low trust (it is overconfident when the answer is absent). Those files are listed as possible with a note, never confirmed, and are never saved automatically. A claim check is a lead: TRUE/FALSE carries a "confirm in the proof file" line and is not cached.
-- **Same files**: `import-state --from-superjev` copies Super Jev's connected-set state (answer database via a read-only open, dataset registry, per-set file lists, saved answers) into Super Clef's own folders. Reviewed manifests and the original files are read in place, read-only. A split set's later parts get a file list built from the registry's originals. Reviewed views (de-identified copies) stay unsearched on purpose and are reported as "not searched", never "not found". No file contents leave this Mac except the per-question package.
-- **Images and video**: `superclef media connect|ask|list`; clef reads them directly (no audio; cut-off text is not reliable).
+- **Your files**: `superclef connect <folder>` connects a folder of notes; `superclef disconnect <name>` forgets it (the originals are never touched). Connected sets are read in place; no file contents leave this Mac except the per-question package.
+- **Images and video**: `superclef media connect|ask|list|remove`; clef reads them directly (no audio; cut-off text is not reliable).
 - **Not done yet**: saving a new answer, `verify` and the Stop gate (they need the TypeSafe provider), and recall on questions whose wording differs from the file (Jev's judge read table-of-contents pages for that; clef reads one short package).
 
 ## Tests
