@@ -2273,7 +2273,9 @@ def index_fts_pass(idx, pointers: list, widx: dict, toc) -> int:
         return 0
     have, keep, wrote, unfinished = idx.fts_have(), set(), 0, set()
     edited = {p for _ptr, p, _e in idx.edited_candidates(pointers)}
-    for ptr, path, entry in index_candidates(idx, pointers):
+    cands = index_candidates(idx, pointers)
+    homes = person_homes(pointers, [c[1] for c in cands] + idx.person_paths(pointers))  # the ask reads the same PROFILEs
+    for ptr, path, entry in cands:
         if path in edited:
             continue
         keep.add(path)
@@ -2281,8 +2283,8 @@ def index_fts_pass(idx, pointers: list, widx: dict, toc) -> int:
         if not _valid_item(item, sha):
             unfinished.add(ptr)  # bytes changed under the updater: the next run builds it
             continue
-        lab = _label_key(entry)
-        if have.get(path) == (sha, ptr, lab):
+        lab, who = _label_key(entry), person_of(path, homes) or ""
+        if have.get(path) == (sha, ptr, lab, who):  # a PROFILE gaining or losing its Relation line moves the person
             continue
         row = toc.rows.get(path)
         trow = row if row and row.get("sha256") == sha else None
@@ -2293,7 +2295,7 @@ def index_fts_pass(idx, pointers: list, widx: dict, toc) -> int:
         tf = Counter(item["whole"]) + hw  # head words count triple, as the scorer counts them
         body = " ".join(w for w, c in sorted(tf.items()) for _ in range(min(c, FTS_TF_CAP)))  # repeats so bm25 sees term frequency
         tocw = " ".join(sorted(set(words(toc_search.toc_words(path, entry, (trow or {}).get("toc") or {})))))
-        idx.fts_put(path, ptr, person_of(path), sha, lab, body, tocw, len(item["passages"]),
+        idx.fts_put(path, ptr, who, sha, lab, body, tocw, len(item["passages"]),
                     sum(c[1] + htotal for c in item["passages"]), json.dumps(item), json.dumps(trow) if trow else None)
         wrote += 1
         if wrote % FTS_COMMIT_EVERY == 0:
@@ -2961,9 +2963,10 @@ def copy_kind(path: str):
         return "writeup"
     return None
 
-# A folder documents/<name>/ holds one person's records. Its PROFILE's
-# "Relation:" line (father / mother / self ...) lets "my dad" find that folder.
-PERSON_RE = re.compile(r"/agents/global/documents/([a-z][a-z0-9_-]*)/", re.I)
+# A person folder is any connected folder holding a PROFILE file with a "Relation:" line (father / mother /
+# self ...); that line lets "my dad" find the folder. The folder is the PROFILE's own one, or the one above it
+# when the PROFILE's first heading names that one ("# Nora" at nora/medical/PROFILE.md: nora/ holds her records).
+RELATION_LINE = re.compile(r"[\s*_>-]*relation\s*:")
 RELATIONS = {"dad": "father", "father": "father", "mom": "mother", "mum": "mother", "mother": "mother",
              "wife": "wife", "husband": "husband", "daughter": "daughter", "son": "son",
              "sister": "sister", "brother": "brother", "self": "self",
@@ -2975,30 +2978,51 @@ FIRST_PERSON = {"i", "me", "my", "mine", "myself"}
 # unsure, filter nothing.
 GROUP_WORDS = {"parents", "kids", "children", "family", "our", "we", "us", "everyone", "both", "grandparents"}
 
-def person_of(path: str):
-    m = PERSON_RE.search(path)
-    return m.group(1).lower() if m else None
+def _profile_home(path: str):
+    """(person folder, its name, relation words) for a PROFILE file with a Relation line, else None."""
+    p = Path(path)
+    if p.stem.lower() != "profile":
+        return None
+    try:
+        lines = p.read_text(errors="replace").lower().splitlines()
+    except OSError:
+        return None
+    rel = next((ln for ln in lines if RELATION_LINE.match(ln)), None)
+    if rel is None:
+        return None
+    heading = set(words(next((ln for ln in lines if ln.startswith("#")), "")))
+    home = next((d for d in (p.parent.parent, p.parent) if words(d.name) and set(words(d.name)) <= heading), p.parent)
+    return str(home), home.name.lower(), {RELATIONS[w] for w in re.findall(r"[a-z]+", rel) if w in RELATIONS}
 
-def people(pointers: list, paths=None) -> dict:
-    """{person folder name: relation words from its PROFILE's Relation line}. `paths`: the person-folder files
-    already listed by the file index (the flag-on FTS path), instead of every connected file's prepare-cache."""
-    out = {}
+def person_homes(pointers: list, paths=None) -> dict:
+    """{person folder: (name, relation words)}. `paths`: the PROFILE files already listed by the file index (the
+    flag-on FTS path), instead of every connected file's prepare-cache."""
+    out, seen = {}, set()
     for group in ([load_cache_files(p) for p in pointers] if paths is None else [paths]):
         for path in group:
-            who = person_of(path)
-            if not who:
+            if path in seen or Path(path).stem.lower() != "profile":
                 continue
-            rel = out.setdefault(who, set())
-            if Path(path).stem.lower() == "profile":
-                try:
-                    lines = Path(path).read_text(errors="replace").lower().splitlines()
-                except OSError:
-                    continue
-                for ln in lines:
-                    if "relation" in ln:
-                        rel |= {RELATIONS[w] for w in re.findall(r"[a-z]+", ln) if w in RELATIONS}
-                        break
+            seen.add(path)
+            if home := _profile_home(path):
+                out.setdefault(home[0], (home[1], set()))[1].update(home[2])
     return out
+
+def people_of(homes: dict) -> dict:
+    out = {}
+    for name, rel in homes.values():
+        out.setdefault(name, set()).update(rel)
+    return out
+
+def people(pointers: list, paths=None) -> dict:
+    """{person folder name: relation words from its PROFILE's Relation line}."""
+    return people_of(person_homes(pointers, paths))
+
+def person_of(path: str, homes: dict):
+    """The name of the person folder holding `path`, or None."""
+    for d in Path(path).parents:
+        if str(d) in homes:
+            return homes[str(d)][0]
+    return None
 
 def question_people(question: str, folks: dict) -> set:
     """Whose records the question is about: a relation word ("my dad") wins,
@@ -3237,16 +3261,17 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
         fts_ready = bool(idx_read and idx_read.fts_usable(WORD_INDEX_VERSION)[0])
         if fts_ready:
             served = index_served(idx_read.coverage(), [p for p in pointers if p not in index_fb])
-            folks = people(pointers, idx_read.person_paths(served)
-                           + [p for ptr in pointers if ptr not in served for p in load_cache_files(ptr)])
+            homes = person_homes(pointers, idx_read.person_paths(served)
+                                 + [p for ptr in pointers if ptr not in served for p in load_cache_files(ptr)])
         else:
-            folks = people(pointers)
+            homes = person_homes(pointers)
     except sqlite3.Error as e:
         idx_read, index_fb, fts_ready = index_failed(idx_read, e), {}, False
-        folks = people(pointers)
+        homes = person_homes(pointers)
+    folks = people_of(homes)
     who = question_people(question, folks)
     def other_person(path: str) -> bool:
-        return bool(who) and person_of(path) not in (None, *who)
+        return bool(who) and person_of(path, homes) not in (None, *who)
     _STAGE["person"] = {"who": sorted(who), "dropped": []}
     if who:
         _STAGE["person"]["skipped_pointers"] = [ptr for ptr in pointers if (files := load_cache_files(ptr))
