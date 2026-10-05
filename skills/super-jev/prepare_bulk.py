@@ -162,6 +162,7 @@ def given_path(value) -> Path:
 
 
 sys.path.insert(0, str(HERE))
+import superclef_env  # noqa: E402,F401  (SUPERCLEF_* -> SUPERJEV_*, before anything reads env)
 from connect_checked import gate, gate_many, memory, watched_refusals  # noqa: E402
 import watched  # noqa: E402
 from watched import read_report_file, report_principals  # noqa: E402

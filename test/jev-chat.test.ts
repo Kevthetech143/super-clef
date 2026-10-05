@@ -2867,3 +2867,10 @@ test('RT5 the door: /right has no earlier question there, so it says so on stder
   assert.match(d.err, /Ask a question first\./);
   assert.equal(r.calls().length, 0);
 });
+
+test('childEnv: SUPERCLEF_X is copied into SUPERJEV_X, the new name wins, unset names change nothing', () => {
+  const e = cfg.childEnv({ PATH: '/x', SUPERCLEF_STATE_DIR: '/new', SUPERJEV_STATE_DIR: '/old', SUPERJEV_JUDGE: 'keep' }, '', '');
+  assert.equal(e.SUPERJEV_STATE_DIR, '/new');
+  assert.equal(e.SUPERJEV_JUDGE, 'keep');
+  assert.equal(e.SUPERJEV_PRINCIPAL, undefined);
+});

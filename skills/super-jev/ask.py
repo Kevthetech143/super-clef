@@ -194,6 +194,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import superclef_env  # noqa: E402,F401  (SUPERCLEF_* -> SUPERJEV_*, before anything reads env)
 import prepare_bulk  # noqa: E402
 import watched  # noqa: E402
 from prepare_bulk import (KIND_VALUES, STATUS_VALUES, DATE_RE, validate_labels, label_bracket, has_secret,  # noqa: E402

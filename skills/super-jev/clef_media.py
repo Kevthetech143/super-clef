@@ -29,6 +29,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+import superclef_env  # noqa: E402,F401  (SUPERCLEF_* -> SUPERJEV_*, before anything reads env)
 import clef_client  # noqa: E402
 
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
