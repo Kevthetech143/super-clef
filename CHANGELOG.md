@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **A stale set is searched from its last good file list.** The engine's `sources` takes `lastGood` (as `navigate` does): a stale pointer is listed as registered, labelled `stale` with the files changed or missing since, and a missing file is not listed. A set with no prepare-cache (a path-connected set) built its rows from `sources`, which refused a stale pointer, so the whole set vanished from search while the trace said it was searched as of its last refresh; the file index likewise held no files for it and still claimed it. Now its unchanged files answer (a changed file goes through the edited-file rule as before), and a stale set the index holds no file list for is searched by today's path. The stale hint says a connect-recipe replay failed only when the last one did.
 - **`ask` hands all its stale sets to the heal side in one call** (`heal_in_background_many`): one state-lock step, at most one engine read (new `recipes` action) and at most one background drain per ask, however many sets are stale. It was one call each, about 1.4 s per stale set. Statuses and honest wording are unchanged (only a real start says refreshing); a failed recipe replay now says the last refresh failed instead of cooling down.
 
 ## 0.3.2
