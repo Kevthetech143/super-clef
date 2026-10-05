@@ -98,6 +98,32 @@ def _python_version():
     return tuple(sys.version_info[:3])
 
 
+def _judge_reachable(host: str) -> bool:
+    """True when ssh key login to the judge machine works (no prompt, 8 second limit)."""
+    try:
+        return subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host, "true"],
+                              capture_output=True, timeout=30).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _only_connect_wrote(root: Path) -> bool:
+    """True when root is empty, or holds only what `superclef connect` writes: _memory/registry.json,
+    prepare-cache/, and per-principal folders of the names in OWNED."""
+    for f in root.iterdir():
+        if f.is_symlink() or not f.is_dir():
+            return False
+        if f.name == "_memory":
+            ok = all(g.name == "registry.json" and g.is_file() for g in f.iterdir())
+        elif f.name == "prepare-cache":
+            ok = True
+        else:
+            ok = all(_owned(g.name, "principal") for g in f.iterdir())
+        if not ok:
+            return False
+    return True
+
+
 def _block(*lines) -> str:
     return "".join("\n        " + ln for ln in lines)
 
@@ -120,9 +146,10 @@ def setup() -> int:
 
     cfg = config_path()
     root = state_root()
-    if root.exists() and not cfg.is_file() and (not root.is_dir() or any(root.iterdir())):
+    if root.exists() and not cfg.is_file() and (not root.is_dir() or not _only_connect_wrote(root)):
         # A folder setup did not make, with something already in it, may be the user's own
-        # files; planting a config there would later let --uninstall claim it.
+        # files; planting a config there would later let --uninstall claim it. A folder holding
+        # only what `superclef connect` wrote (its registry or prepare-cache) is ours.
         print(f"REFUSED: {root} already exists and is not empty, and setup did not make it. "
               "Point SUPERJEV_STATE_DIR at a new or empty folder, then run setup again.")
         return 1
@@ -159,6 +186,18 @@ def setup() -> int:
         problems.append(f"{key_env} is not set. Every ask and check needs it.{note or ' Run:'}"
                         + _block(*lines))
 
+    if judges.profile().kind == "clef":
+        host = os.environ.get("SUPERJEV_CLEF_HOST", "").strip()
+        how = ("Set the judge host to the ssh target of the machine that runs clef, with key login, and run setup again:"
+               "\n        export SUPERJEV_CLEF_HOST=user@clef-host   (SUPERCLEF_CLEF_HOST works too)")
+        if not host:
+            problems.append("The judge host is not set. " + how)
+        elif _judge_reachable(host):
+            print(f"ok    judge machine reachable over ssh: {host}")
+        else:
+            problems.append(f"The judge machine {host} did not answer ssh (ssh -o BatchMode=yes -o ConnectTimeout=8 {host} true failed). "
+                            "Check the name and that key login works, or " + how[0].lower() + how[1:])
+
     if shutil.which("claude"):
         print("ok    description writer: claude CLI found (connect uses it only if it is logged in; "
               "--writer builtin needs no login)")
@@ -176,9 +215,8 @@ def setup() -> int:
         else:
             print("\nFix the above, then run setup again.")
         return 1
-    print("\nREADY. Next step: connect a folder of .md files (AGENTS.md step 4):\n"
-          "  python3 skills/super-jev/prepare_bulk.py --root /path/to/folder "
-          "--pointer my-notes --principal me --writer builtin")
+    print("\nREADY. Next step: connect a folder of .md files:\n"
+          "  superclef connect /path/to/folder")
     return 0
 
 

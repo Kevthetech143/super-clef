@@ -52,6 +52,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("SUPERJEV_STATE_DIR", str(tmp_path / "state"))
     monkeypatch.setenv("TYPESAFE_API_KEY", "not-a-real-key")
     monkeypatch.setenv("SHELL", "/bin/zsh")
+    monkeypatch.setenv("SUPERJEV_CLEF_HOST", "judge@example-host")
+    monkeypatch.setattr(setup, "_judge_reachable", lambda host: True)
     # a healthy toolchain unless a test says otherwise; raising=False so a missing seam
     # fails the test on what setup prints, not on an AttributeError
     monkeypatch.setattr(setup, "_node_major", lambda: 24)
