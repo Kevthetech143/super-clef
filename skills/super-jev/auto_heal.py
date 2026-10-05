@@ -747,7 +747,9 @@ def heal_in_background_many(pointers: list, principal: str, views=()) -> dict:
     if token:
         try:
             _name_child(principal, head, token, _spawn_detached(_drain_cmd(principal, head, token)))
-            if not reclaimed:
+            if reclaimed:
+                _log(principal=principal, pointer=head, action="reclaim")
+            else:
                 verdict[head] = "started"
         except OSError:
             _release_lock(principal, head, token)

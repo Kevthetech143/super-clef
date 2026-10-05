@@ -4,6 +4,7 @@ even when the ask's own sets only cooled down. Popen is faked, so no drain reall
 
     python3 -m pytest skills/super-jev/tests/test_auto_heal_reclaim.py -q
 """
+import json
 import time
 
 from test_auto_heal import _add_pointer, _setup, ah
@@ -28,6 +29,8 @@ def test_an_ask_that_only_cooled_down_still_reclaims_an_orphaned_queue_item(tmp_
     out = ah.heal_in_background_many(["asked"], "agent")
     assert out == {"asked": "cooldown"}  # the ask's own answer is unchanged
     assert len(calls) == 1 and "--drain" in calls[0][2]  # a drain was started for the orphan
+    assert any(json.loads(ln).get("action") == "reclaim" and json.loads(ln).get("pointer") == "stuck"
+               for ln in ah.LOG_PATH.read_text().splitlines())
     assert ah._lock_path("agent", "stuck").exists() and "gone" not in ah._lock_path("agent", "stuck").read_text()
 
 

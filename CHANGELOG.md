@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **A queued heal whose lock holder is gone is picked up again.** A set left queued when its drain ended or died (cooling down, over the cap, or the holder killed) stayed "in-progress" until an ask named that very set. Now any ask that finds queued work with no live lock holder starts a drain for it, only for items that can run now, so a cooling set never respawns one.
+- **A queued heal whose lock holder is gone is picked up again (latent orphan-queue fix).** A set left queued when its drain ended or died stayed queued until an ask named that very set, because an ask whose own sets only cooled down never started a drain. Now any ask that finds queued work with no live lock holder starts a drain for it, only for items that can run now, so a cooling set never respawns one. The start is logged as `reclaim`.
 - **`ask` hands all its stale sets to the heal side in one call** (`heal_in_background_many`): one state-lock step, at most one engine read (new `recipes` action) and at most one background drain per ask, however many sets are stale. It was one call each, about 1.4 s per stale set. Statuses and honest wording are unchanged (only a real start says refreshing); a failed recipe replay now says the last refresh failed instead of cooling down.
 
 ## 0.3.2
