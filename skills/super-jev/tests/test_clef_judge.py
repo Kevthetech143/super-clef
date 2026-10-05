@@ -219,11 +219,11 @@ def test_a_secret_file_is_held_and_never_in_the_package(clef, tmp_path, monkeypa
 def test_a_clean_pick_scores_its_probability_and_the_rest_stay_unconfirmed(clef, tmp_path, monkeypatch):
     fs = _files(tmp_path, 3)
     sent = []
-    monkeypatch.setattr(judges, "ask", lambda s, q, timeout=0: sent.append((s, q)) or _reply("file_2", 0.82, ["file_1", "file_3", "none"]))
+    monkeypatch.setattr(judges, "ask", lambda s, q, timeout=0: sent.append((s, q)) or _reply("file_2", 0.92, ["file_1", "file_3", "none"]))
     scores, partial, err, notes = ask.clef_confirm("ENT clinic phone number", fs)
     state, qs = sent[0]
     picked = fs[int(state["file_2"]["name"][4]) ]
-    assert scores == {picked: 0.82} and err is None
+    assert scores == {picked: 0.92} and err is None
     assert picked not in notes and all(notes[p] == ask.INCONCLUSIVE for p in fs if p != picked)
     assert ask._CLEF["low_trust"] == set() and ask._CLEF["leans_none"] is False
     assert all(len(v["text"]) <= ask.CLEF_PASSAGE_CHARS for v in state.values()) and len(state) <= ask.CLEF_PACKAGE_FILES
@@ -231,12 +231,12 @@ def test_a_clean_pick_scores_its_probability_and_the_rest_stay_unconfirmed(clef,
     assert set(qs["pick"]["criteria"]) == {"file_1", "file_2", "file_3", "none"}
 
 
-def test_a_pick_above_the_trust_cap_is_low_trust(clef, tmp_path, monkeypatch):
+def test_a_pick_under_the_trust_min_is_low_trust(clef, tmp_path, monkeypatch):
     fs = _files(tmp_path, 2)
-    monkeypatch.setattr(judges, "ask", lambda s, q, timeout=0: _reply("file_1", 0.96, ["file_2", "none"]))
+    monkeypatch.setattr(judges, "ask", lambda s, q, timeout=0: _reply("file_1", 0.8, ["file_2", "none"]))
     scores, _, _, notes = ask.clef_confirm("ENT clinic phone number", fs)
     (p,) = scores
-    assert p in ask._CLEF["low_trust"], "a pick above 0.9 is reported as possible, not certain"
+    assert p in ask._CLEF["low_trust"], "a pick under 0.9 is reported as possible, not certain"
 
 
 def test_none_is_low_trust_every_file_kept_with_the_leans_none_flag(clef, tmp_path, monkeypatch):
