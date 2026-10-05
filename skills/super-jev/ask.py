@@ -3373,6 +3373,10 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
     merged, statuses, routing_picked = [], {}, set()
     state_of, healing = {}, set()  # --json: why each unsearched set was left out, and whether it is being refreshed
     _STAGE["stale_changed"] = []
+    # ALL stale sets go to the heal side in one call, so the ask's heal work does not grow with their count.
+    heals = {} if replay else auto_heal.heal_in_background_many(
+        [ptr for ptr, kind, *_ in results if stale_served.get(ptr) or auto_heal.is_stale_kind(kind)],
+        principal, views=set(view_pointers))
     for ptr, kind, rows, elapsed, ok in results:
         served = stale_served.get(ptr)
         record_pointer_outcome(health, ptr, ok, elapsed, stale=_is_stale_kind(kind) or bool(served))
@@ -3422,21 +3426,19 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
             # it only means the *next* lookup may no longer hit it.
             heal_note = ""
             stale = bool(served) or auto_heal.is_stale_kind(kind)
-            result = None
-            if stale and not replay:
-                result = auto_heal.heal_in_background(ptr, principal, view=ptr in view_pointers)
-                if result in ("started", "in-progress"):
-                    healing.add(ptr)  # "no-recipe", "held", "manual": nothing is refreshing, so never claimed
-                if result == "started":
-                    heal_note = " (refreshing in the background; ask again in a minute)"
-                elif result == "in-progress":
-                    heal_note = " (auto-heal: a refresh of this set is running, or the agent is at its limit of refreshes; queued, it runs when one finishes)"
-                elif result == "cooldown":
-                    err = auto_heal.last_refresh_error(principal, ptr)
-                    heal_note = (f" (auto-heal: last refresh FAILED: {err}; retrying after cooldown)" if err
-                                 else " (auto-heal: refreshed recently, cooling down)")
-                elif result == "rate-limited":
-                    heal_note = " (auto-heal: hourly refresh limit reached)"
+            result = heals.get(ptr) if stale and not replay else None
+            if result in ("started", "in-progress"):
+                healing.add(ptr)  # "no-recipe", "held", "manual": nothing is refreshing, so never claimed
+            if result == "started":
+                heal_note = " (refreshing in the background; ask again in a minute)"
+            elif result == "in-progress":
+                heal_note = " (auto-heal: a refresh of this set is running, or the agent is at its limit of refreshes; queued behind another set's refresh; it runs when its turn comes)"
+            elif result == "cooldown":
+                err = auto_heal.last_refresh_error(principal, ptr)
+                heal_note = (f" (auto-heal: last refresh FAILED: {err}; retrying after cooldown)" if err
+                             else " (auto-heal: refreshed recently, cooling down)")
+            elif result == "rate-limited":
+                heal_note = " (auto-heal: hourly refresh limit reached)"
             # [STALE] marks a pointer that is just waiting on its own refresh (not
             # a live error, never benched) so it reads differently at a glance from
             # a real provider error -- appended after the existing kind/hint/heal

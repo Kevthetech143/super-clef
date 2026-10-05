@@ -74,7 +74,7 @@ def _setup(tmp_path, monkeypatch, changed=(), heal="cooldown"):
     monkeypatch.setattr(ask.toc_search, "run", lambda q, corpus, hits, hooks, cache_path=None: (list(corpus), [], {}))
     monkeypatch.setattr(ah, "reconnect_now", lambda ptr, principal, timeout=None: "changed")
     heals = []
-    monkeypatch.setattr(ah, "maybe_heal", lambda *a, **k: heals.append(a) or heal)
+    monkeypatch.setattr(ah, "heal_in_background_many", lambda ptrs, principal, views=(): heals.append(ptrs) or {p: heal for p in ptrs})
     monkeypatch.setattr(ah, "last_refresh_error", lambda *a: None)
     confirmed = []
     monkeypatch.setattr(ask, "confirm", lambda q, ps: (confirmed.extend(ps) or

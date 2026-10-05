@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bounded background auto-heal for stale ("preparation-required"/"refresh-required") pointers.
 
-ask.py calls maybe_heal(pointer, principal) whenever a lookup hits a stale pointer. This never
+ask.py calls heal_in_background_many(pointers, principal) once per lookup, with every stale pointer it hit. This never
 runs the refresh inline and never blocks the caller: at most it starts a detached background
 process, using the exact same prepare_path (prepare_bulk.py --refresh, naming the pointer and its
 principals from refresh_changed.py's prepare_args; --refresh replays the rest of the pointer's
@@ -59,7 +59,7 @@ LOG_PATH = STATE_DIR / "autoheal.log"
 COOLDOWN_SECS = 600       # 10 minutes per pointer, after a refresh that worked
 RETRY_SECS = 120          # wait after a failed/timed-out attempt (doubles per repeat, up to MAX_RETRY_SECS)
 MAX_RETRY_SECS = 3600     # a set that keeps failing is tried at most once an hour
-MAX_CONCURRENT = 2        # refreshes running at once per principal (each may be a paid writer run)
+MAX_CONCURRENT = 2        # refreshes running at once per principal (each may be a paid writer run); ask-driven heals now run one drain, one set at a time
 HELD_EXPIRE_SECS = 86400  # a "held, unchanged" mark is forgotten after a day (a scan rule may have changed)
 MAX_PER_HOUR = 6          # per principal
 LOCK_STALE_SECS = 4 * 3600  # a live pid older than this is a reused pid, not a refresh (none runs this long)
@@ -128,17 +128,17 @@ def _wait_secs(state: dict, pointer: str, now: float, cooldown_secs: int = None)
     return state["pointers"].get(pointer, 0) + (COOLDOWN_SECS if cooldown_secs is None else cooldown_secs) - now
 
 
-def _live_locks(principal: str, besides: str) -> int:
+def _live_locks(principal: str, besides: str, drains: bool = False) -> int:
     """Refreshes or reconnects running for this principal, not counting `besides` or a lock a
     drain holds while it only heals the queue (it marks it `drain`; a run of its own pointer
-    drops the mark, so that run counts once)."""
+    drops the mark, so that run counts once). `drains` True: count those too (any lock holder)."""
     mine = _lock_path(principal, besides)
     n = 0
     for lock in STATE_DIR.glob(f"{principal}.*.lock"):
         if lock == mine:
             continue
         try:
-            if json.loads(lock.read_text()).get("drain"):
+            if not drains and json.loads(lock.read_text()).get("drain"):
                 continue
         except (OSError, ValueError):
             pass
@@ -555,6 +555,7 @@ def reconnect_recipe(pointer: str, principal: str, memory=None) -> str:
         result, preview = "failed", {}
     reason = preview.get("reason") if result == "failed" else None
     _settle(principal, pointer, result == "reconnected")
+    _note_replay_failure(principal, pointer, result == "reconnected", reason)
     if reason in DETERMINISTIC_REFUSALS:
         with _state_txn(principal) as st:  # same files, same refusal: wait for them to change
             st["held"][pointer] = {"fp": fingerprint, "ts": time.time()}
@@ -645,48 +646,108 @@ def maybe_heal(pointer: str, principal: str, cache_dir: Path = None,
     return "started"
 
 
-def _recipe_gate(pointer: str, principal: str) -> str:
-    """Why a recipe replay must not be started now, read-only (the checks reconnect_recipe makes
-    before it admits one): "no-recipe", "held", "cooldown", else "" (go)."""
+def _recipes(principal: str, pointers: list) -> dict:
+    """{pointer: recipe} for those that have one: ONE engine read for all of them (each read is a
+    registry open). A failed read answers none, so nothing is claimed as refreshing."""
     try:
-        got = _memory({"action": "recipe", "pointer": pointer, "principal": principal})
+        got = _memory({"action": "recipes", "pointers": pointers, "principal": principal})
     except Exception:
-        got = {}
-    recipe = got.get("recipe") if got.get("status") == "ok" else None
-    if not isinstance(recipe, dict):
-        return "no-recipe"
-    state = _load_state(principal)
-    paths = [str(s.get("path")) for s in recipe.get("sources") or [] if isinstance(s, dict)]
-    mark = state.get("held", {}).get(pointer) or {}
-    if mark.get("fp") == _fingerprint(paths, recipe) and time.time() - mark.get("ts", 0) < HELD_EXPIRE_SECS:
-        return "held"
-    return "cooldown" if _wait_secs(state, pointer, time.time()) > 0 else ""
+        return {}
+    found = got.get("recipes") if got.get("status") == "ok" else None
+    return {p: r["recipe"] for p, r in (found or {}).items()
+            if isinstance(r, dict) and r.get("status") == "ok" and isinstance(r.get("recipe"), dict)}
 
 
-def heal_in_background(pointer: str, principal: str, view: bool = False) -> str:
-    """What an ask does for a stale set: start its heal and return at once, whatever the set count.
-    A changed set gets maybe_heal's refresh; a set with nothing to redraft (no-change), or built
-    without prepare_bulk (no-report, a recorded recipe), gets the reconnect, started detached
-    (reconnect_now with no wait) or queued for a lock holder's drain. Same result words as
-    maybe_heal: "started", "in-progress", "cooldown", "rate-limited", "failed", or the skip reason."""
-    result = "no-report" if view else maybe_heal(pointer, principal)
-    if result not in ("no-change", "no-report"):
-        return result
-    result = "no-report" if view else reconnect_now(pointer, principal, timeout=0)
-    if result == "no-report":
-        if "-manual-" in pointer:
-            return "manual"
-        why = _recipe_gate(pointer, principal)
-        if why:
-            return why
-        _queue(principal, pointer, "recipe")
-        if _live_locks(principal, pointer) >= MAX_CONCURRENT:
-            return "in-progress"  # queued: a running refresh's drain replays it when it ends
-        token = _acquire_lock(principal, pointer)
-        if token:
-            _hand_off(principal, pointer, token)  # starts the drain that replays the recipe
-        return "started"
-    return "started" if result == "timeout" else result
+def _note_replay_failure(principal: str, pointer: str, ok: bool, reason: str = None) -> None:
+    """A recipe replay writes no refresh log of its own: leave one line so a later ask says the last
+    refresh failed (last_refresh_error) instead of "cooling down"; a replay that worked clears it."""
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        (STATE_DIR / f"{principal}-{pointer}-last-refresh.log").write_text(
+            "recipe replay worked\n" if ok else f"ERROR: recipe replay failed ({reason or 'refused'})\n")
+    except OSError:
+        pass
+
+
+def heal_in_background_many(pointers: list, principal: str, views=()) -> dict:
+    """What an ask does for ALL its stale sets: one call, one state-lock step, at most one engine
+    read (for the sets that heal by recipe) and at most one detached drain, however many sets are
+    stale. Every set is judged in that one pass and returns at once with {pointer: status}:
+      "started"      the drain was spawned and this set heals first (the only one that really started)
+      "in-progress"  queued: a running refresh or the new drain heals it when its turn comes
+      "rate-limited" queued, over the hourly cap     "cooldown" / "held" / "no-recipe" / "manual": nothing runs
+      "failed"       the drain could not start
+    A changed set queues a refresh, one with nothing to redraft a reconnect, one built without
+    prepare_bulk (or a reviewed view) its recorded recipe; the drain applies the per-set rules
+    (cooldown, cap, held files) again when it gets to each. `views`: pointers that heal by recipe only."""
+    if not pointers:
+        return {}
+    out, plan = {}, {}  # plan: owner -> (kind, [pointers served by it])
+    for ptr in dict.fromkeys(pointers):
+        if "-manual-" in ptr:
+            out[ptr] = "manual"
+            continue
+        report, owner = (None, None) if ptr in views else _report_for(ptr, rc.CACHE_DIR)
+        kind = "recipe"
+        if isinstance(report, dict) and rc.prepare_args(report, principal) is not None:
+            try:
+                cache = json.loads((rc.CACHE_DIR / f"{owner}.json").read_text())
+            except (OSError, ValueError):
+                cache = {}
+            kind = "refresh" if rc.changed_files(report, cache) else "reconnect"
+        else:
+            owner = ptr
+        plan.setdefault(owner, (kind, []))[1].append(ptr)
+    recipes = _recipes(principal, [o for o, (k, _) in plan.items() if k == "recipe"]) if any(
+        k == "recipe" for k, _ in plan.values()) else {}
+
+    now, verdict, order = time.time(), {}, []
+    token = head = ""
+    with _state_txn(principal) as state:
+        recent = [t for t in state["attempts"] if now - t < 3600]
+        slots = MAX_PER_HOUR - len(recent)
+        # A set that already healed this hour queues behind one that has not (fair share of the cap).
+        for owner in sorted(plan, key=lambda o: state["pointers"].get(o, 0) > now - 3600):
+            kind = plan[owner][0]
+            if kind == "recipe":
+                recipe = recipes.get(owner)
+                if recipe is None:
+                    verdict[owner] = "no-recipe"
+                    continue
+                paths = [str(s.get("path")) for s in recipe.get("sources") or [] if isinstance(s, dict)]
+                mark = state["held"].get(owner) or {}
+                if mark.get("fp") == _fingerprint(paths, recipe) and now - mark.get("ts", 0) < HELD_EXPIRE_SECS:
+                    verdict[owner] = "held"
+                    continue
+            if _wait_secs(state, owner, now) > 0:
+                verdict[owner] = "cooldown"
+                continue
+            was = state["pending"].get(owner) or {}
+            state["pending"][owner] = {"kind": kind, "ts": was.get("ts", now + len(order) * 1e-6)}
+            if kind == "refresh":  # a writer run: it takes an hourly slot
+                if slots <= 0:
+                    verdict[owner] = "rate-limited"
+                    continue
+                slots -= 1
+            verdict[owner] = "in-progress"
+            order.append(owner)
+        # One drain for the whole batch, unless a refresh or a drain already runs: it heals the queue.
+        if order and not _live_locks(principal, "", drains=True):
+            head = order[0]
+            token = _acquire_lock(principal, head)
+    if token:
+        try:
+            _name_child(principal, head, token, _spawn_detached(_drain_cmd(principal, head, token)))
+            verdict[head] = "started"
+        except OSError:
+            _release_lock(principal, head, token)
+            for owner in order:
+                verdict[owner] = "failed"
+    for owner, (kind, ptrs) in plan.items():
+        _log(principal=principal, pointer=owner, action="batch-heal", kind=kind, result=verdict[owner])
+        for ptr in ptrs:
+            out[ptr] = verdict[owner]
+    return out
 
 
 SCAN_SECS = 600           # 10 minutes per principal between new-file scans

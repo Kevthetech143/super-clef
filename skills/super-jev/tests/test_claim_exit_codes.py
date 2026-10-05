@@ -53,7 +53,7 @@ class World:
         monkeypatch.setattr(ask, "claim_cache_put", lambda *a: None)
         monkeypatch.setattr(ask, "state_dir", lambda p: self.sdir)
         # A failed or stale set must not start a real refresh from a test.
-        monkeypatch.setattr(ask.auto_heal, "maybe_heal", lambda *a, **k: "cooldown")
+        monkeypatch.setattr(ask.auto_heal, "heal_in_background_many", lambda ptrs, principal, views=(): {p: "cooldown" for p in ptrs})
         monkeypatch.setattr(ask.auto_heal, "reconnect_now", lambda *a, **k: "changed")
         monkeypatch.setattr(ask.auto_heal, "last_refresh_error", lambda *a: None)
         self.monkeypatch = monkeypatch

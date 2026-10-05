@@ -46,6 +46,7 @@ ACTIONS = {
     'open': ['pointer', 'question', 'principal'],
     'sources': ['pointer', 'principal'],
     'recipe': ['pointer', 'principal'],
+    'recipes': ['pointers', 'principal'],
     'watch': ['pointer', 'principals', 'folders'], 'unwatch': ['pointer', 'principals'],
     'watched-check': ['pointer', 'principals', 'paths'],
 }
@@ -371,6 +372,8 @@ def run(request, config):
         return service.attempt(request['attemptId'], request['principal'])
     if action == 'recipe':
         return service.recipe(request['pointer'], request['principal'])
+    if action == 'recipes':
+        return {'status': 'ok', 'recipes': {p: service.recipe(p, request['principal']) for p in request['pointers']}}  # one registry open for all
     if action == 'sources':
         return service.sources(request['pointer'], request['principal'],
                                request.get('offset', 0), request.get('limit', 25))
