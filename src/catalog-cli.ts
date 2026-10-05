@@ -23,6 +23,7 @@
  * Trigger/Use-when lines — see `src/catalog-build-cli.ts` for the generator.
  * `npm run catalog:build` remains as a direct alias to the same generator.
  */
+import { aliasEnv } from './env-alias.ts';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { formatCatalogValidation, parseCatalogText, validateCatalog, type CatalogRecord } from './enhance/catalog.ts';
@@ -199,6 +200,7 @@ async function runBuild(args: string[]): Promise<number> {
 }
 
 async function main(): Promise<number> {
+  aliasEnv(process.env);
   const args = process.argv.slice(2);
   if (!args.length || args.includes('--help')) { console.log(usage); return 0; }
   const [sub, ...rest] = args;

@@ -3,6 +3,7 @@ import { readFile, open, unlink } from 'node:fs/promises';
 import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { run } from './loop.ts';
+import { aliasEnv } from './env-alias.ts';
 import { getJudge, keyEnv, requireKey } from './judge.ts';
 import { organizer, organizerReport, validateOrganizerInput } from './organizer.ts';
 import type { Evaluation, Evaluator } from './types.ts';
@@ -23,6 +24,7 @@ See AGENTS.md (Tool: organize) and examples/organizer.json for the input contrac
 let reserved: Awaited<ReturnType<typeof open>> | undefined;
 let output: string | undefined;
 try {
+  aliasEnv(process.env);
   const args = process.argv.slice(2);
   if (args.length === 0 || args.includes('--help')) { console.log(usage); process.exit(0); }
   const [command, file, ...flags] = args;

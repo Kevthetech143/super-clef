@@ -10,6 +10,7 @@
  */
 import { mkdir, open, readFile, stat, writeFile } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
+import { aliasEnv } from './env-alias.ts';
 import { getJudge, keyEnv, requireKey } from './judge.ts';
 import { StubEvaluator, choiceAnswer } from './enhance/stub.ts';
 import {
@@ -169,6 +170,7 @@ function number(raw: string | undefined, flag: string): number {
 }
 
 async function main(): Promise<number> {
+  aliasEnv(process.env);
   const args = process.argv.slice(2);
   if (!args.length || args.includes('--help')) { console.log(usage); return 0; }
 

@@ -9,6 +9,7 @@
  */
 import { stat, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { aliasEnv } from './env-alias.ts';
 import { getJudge, keyEnv, requireKey } from './judge.ts';
 import { StubEvaluator, choiceAnswer } from './enhance/stub.ts';
 import { decidePermit, permitRequest, PERMIT_CONFIDENCE_THRESHOLD, type PermitSnapshot } from './enhance/permit.ts';
@@ -132,6 +133,7 @@ function number(raw: string | undefined, flag: string): number {
 const EXIT_BY_VERDICT = { safe_to_auto: 0, needs_approval: 2, refuse: 3 } as const;
 
 try {
+  aliasEnv(process.env);
   const args = process.argv.slice(2);
   if (!args.length || args.includes('--help')) { console.log(usage); process.exit(0); }
 
