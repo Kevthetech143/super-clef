@@ -1,0 +1,167 @@
+{
+  "note": "Synthetic fixture for the offline fetch admission bench, plumbing only, not evidence of real ranking accuracy. Fake catalog of 15 short v2 records (plain text; utterances are added at bench time from the train split only -- see bench/fetch-bench.ts). 20 request -> expected_id cases plus 5 no-match cases (expected_id null) that nothing in the catalog serves, phrased closer to how a real user asks than to the catalog's own wording.",
+  "catalog": [
+    {
+      "id": "pay-utility",
+      "text": "Pay an example utility electric bill via the guest pay-as-guest flow on utility.example. No login needed."
+    },
+    {
+      "id": "place-put",
+      "text": "Place a cash-secured put option on Robinhood, live, on a per-ticket go from the operator."
+    },
+    {
+      "id": "place-covered-call",
+      "text": "Sell a covered call on Robinhood, buying the backing shares first if needed."
+    },
+    {
+      "id": "gate",
+      "text": "Check a draft reply or claim against the evidence it is supposed to be carried by before it is sent."
+    },
+    {
+      "id": "worker-verify",
+      "text": "Check a worker agent's final report against machine-collected evidence before trusting it."
+    },
+    {
+      "id": "sweep",
+      "text": "Run every question over a pile of records bigger than one provider call, with a coverage proof."
+    },
+    {
+      "id": "x-account-manage",
+      "text": "Post, reply to, or edit the profile of the fleet's X/Twitter account."
+    },
+    {
+      "id": "store-buy",
+      "text": "Buy a single item from a personal store account through the product page's Buy Now button."
+    },
+    {
+      "id": "content-comic-run",
+      "text": "Produce a short-form comic video from a script and starter images."
+    },
+    {
+      "id": "ebay-sold-price",
+      "text": "Look up recent sold prices for an item on eBay Terapeak, read-only."
+    },
+    {
+      "id": "stock-deep-dive",
+      "text": "Produce a full twelve-section dossier grading one stock for the options wheel."
+    },
+    {
+      "id": "gpu-test",
+      "text": "Run a no-install graphics stress test on any connected Mac."
+    },
+    {
+      "id": "rent-pay-portal",
+      "text": "Pay a tenant's monthly rent through a property portal from the checking account on file."
+    },
+    {
+      "id": "card-shrink",
+      "text": "Curate and trim a prompt card that has grown too large, on a fifteen-day cron or on demand."
+    },
+    {
+      "id": "restart-agent",
+      "text": "Restart one team agent through the GUI control endpoint, with a checkpoint and a verify step."
+    }
+  ],
+  "cases": [
+    {
+      "request": "I need to pay the electric bill before it's late",
+      "expected_id": "pay-utility"
+    },
+    {
+      "request": "sell a put on this ticker for premium income",
+      "expected_id": "place-put"
+    },
+    {
+      "request": "I already own the shares, sell a call against them",
+      "expected_id": "place-covered-call"
+    },
+    {
+      "request": "check my draft reply against what I actually read",
+      "expected_id": "gate"
+    },
+    {
+      "request": "is this claim actually supported by the evidence I collected",
+      "expected_id": "gate"
+    },
+    {
+      "request": "the worker said it's done, verify that before I trust it",
+      "expected_id": "worker-verify"
+    },
+    {
+      "request": "go through every line of this dataset, don't skip any",
+      "expected_id": "sweep"
+    },
+    {
+      "request": "post an update to the fleet's twitter account",
+      "expected_id": "x-account-manage"
+    },
+    {
+      "request": "buy this product from my personal store account",
+      "expected_id": "store-buy"
+    },
+    {
+      "request": "make a short comic video from this script",
+      "expected_id": "content-comic-run"
+    },
+    {
+      "request": "what did this item actually sell for recently on ebay",
+      "expected_id": "ebay-sold-price"
+    },
+    {
+      "request": "give me the full wheel-grade writeup on this stock",
+      "expected_id": "stock-deep-dive"
+    },
+    {
+      "request": "stress test the graphics card on this mac",
+      "expected_id": "gpu-test"
+    },
+    {
+      "request": "pay the tenant's rent this month",
+      "expected_id": "rent-pay-portal"
+    },
+    {
+      "request": "this awareness card has gotten too fat, trim it",
+      "expected_id": "card-shrink"
+    },
+    {
+      "request": "restart the agent that's stuck",
+      "expected_id": "restart-agent"
+    },
+    {
+      "request": "check the electric bill is paid on time",
+      "expected_id": "pay-utility"
+    },
+    {
+      "request": "confirm a worker's report before accepting it",
+      "expected_id": "worker-verify"
+    },
+    {
+      "request": "run this whole pile of records through jev and prove coverage",
+      "expected_id": "sweep"
+    },
+    {
+      "request": "tweet this from the fleet account",
+      "expected_id": "x-account-manage"
+    },
+    {
+      "request": "book me a dentist appointment for next Tuesday",
+      "expected_id": null
+    },
+    {
+      "request": "translate this paragraph into Portuguese",
+      "expected_id": null
+    },
+    {
+      "request": "what is the boiling point of ethanol at sea level",
+      "expected_id": null
+    },
+    {
+      "request": "write a lullaby for a three year old",
+      "expected_id": null
+    },
+    {
+      "request": "renew my passport before it expires",
+      "expected_id": null
+    }
+  ]
+}

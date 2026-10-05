@@ -1,0 +1,37 @@
+{
+  "name": "super-clef",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Super Clef: a competing Super Jev built on the local clef judge (Cloudflare clef-flash on a second Apple-silicon machine reached over ssh), searching the same connected files",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "superclef": "bin/superclef.js"
+  },
+  "scripts": {
+    "clef": "node bin/superclef.js",
+    "demo": "node examples/demo.ts",
+    "test": "npm run test:node && npm run test:skill && npm run test:more && npm run test:media:offline",
+    "test:node": "node --import ./test/clean-env.ts --test test/*.test.ts test/enhance/*.test.ts test/bench/*.test.ts",
+    "replay": "node src/replay.ts",
+    "organize": "node src/cli.ts organize",
+    "sweep": "node src/sweep-cli.ts",
+    "permit": "node src/permit-cli.ts",
+    "chain": "node src/experimental/chain-cli.ts",
+    "fetch": "node src/fetch-cli.ts",
+    "skill-search": "node src/skill-search-cli.ts",
+    "catalog": "node src/catalog-cli.ts",
+    "catalog:build": "node src/catalog-build-cli.ts",
+    "demo:enhance": "node examples/enhance-demo.ts",
+    "bench:live": "node bench/live-measure.ts",
+    "bench:fetch": "node bench/fetch-bench.ts",
+    "test:skill": "python3 -m pytest skills/super-jev/tests -q -p no:cacheprovider -o tmp_path_retention_policy=failed",
+    "test:more": "python3 -m pytest skills/super-jev-build-cycle/tests -q -p no:cacheprovider -o tmp_path_retention_policy=failed && python3 -m unittest discover -s experiments/verified-pointer-memory -p \"test_*.py\"",
+    "e2e:clef": "node scripts/e2e-clef.mjs",
+    "test:media": "python3 -m pytest tests/media -q -p no:cacheprovider",
+    "test:media:offline": "python3 -m pytest tests/media/test_media_unit.py -q -p no:cacheprovider"
+  }
+}

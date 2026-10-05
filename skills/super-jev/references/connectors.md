@@ -1,0 +1,386 @@
+# Source connectors
+
+Known credential/key suffixes (`env`, `pem`, `key`, `p12`, `pfx`, `jks`, `kdbx`, `kdb`, `keystore`, `pkcs12`, `ppk`, `p8`) are never connected, including compound suffixes. Inventory also holds these names and symlink targets; content scanning remains necessary for other files.
+
+Bulk inventory is Markdown by default (`CONNECTABLE_EXTENSIONS = ('.md',)`). `--ext py,ts,sh` (repeatable, comma-separated, any case) adds those suffixes; a credential or key suffix (env, pem, key, ...) is refused by name and connects nothing. The suffixes are recorded in the report as `extensions`, and `--refresh` replays them; an older recipe that recorded `.py` refreshes the same way. A file named `*-secret.*` or holding a secret-like line is held by name. Binary/control-character and invalid UTF-8 files are held before the writer. A file up to 250,000 bytes connects whole; a bigger one is held "too big, split it". Roots are stored as given (made absolute, symlinks kept), so a release symlink refresh reads the current target. Old recipes that already stored a resolved release path cannot infer the intended link: re-run with the intended `--root` once.
+
+Onboarding a new connector or refreshing one? Start at [`super-jev-connect/SKILL.md`](../../super-jev-connect/SKILL.md) — this page is the deep reference it links back to.
+
+A connector is the source-specific way an agent connects data to Super Jev. Use these names when explaining the product. Existing connector workflows share backends; these labels do not create a `connect` command, a new plugin, or automatic synchronization.
+
+| Human-facing connector | Available today | Agent execution/setup |
+|---|---|---|
+| Skills | Discovery from configured trusted local skill roots | `skills` via sibling `skill-search`; validate the selected roots and each skill's name/description metadata. A scan reads the catalog; no continuous sync service is installed. |
+| Brain | Reviewed local records from a specified brain/person/project | `find` for reviewed datasets; configured `memory` for registered pointers and verified reuse. Scope is the listed records, not the whole brain. |
+| Documents | Reviewed local text documents | Same reviewed dataset and optional memory workflow as Brain. Extraction of arbitrary PDFs or other formats is not automatic. |
+| Repo | A reviewed snapshot of local checked-out repository files | Same local-file preparation workflow. Record the revision and included files. Remote cloning/fetching, merge-triggered refresh and repo watching are not bundled connectors yet. |
+| GitHub repo history | PRs (body, reviews, inline review comments, comments), issues, commit messages and release notes of one repo | `connect_github.py OWNER/REPO` / `superjev connect-github`: exports one markdown file per item via the signed-in `gh` CLI, then runs `prepare_bulk.py`. `--refresh` fetches only items updated since the last run. Not a live sync; run refresh after merges. |
+| Database | Proposed | No direct database ingestion connector. SQLite answer storage is not a database-source connector. An authorized reviewed export can use Documents, but say it is an export. |
+| Website/links | Proposed | No direct URL ingestion/refresh connector. An authorized reviewed local copy can use Documents, but say it is a copy, not a live connection. |
+
+For common setup questions, use `dispatch.py help --question "your question"`; choose `help --topic TOPIC` for a maintained exact topic answer. Help ships with the skill and does not require a connection, key or fresh Jev call. It is not a guarantee of coverage for every how-to question. The guide below supplies the detailed workflow when needed.
+
+## User-defined connectors and names
+
+Skills, Brain, Documents and Repo are convenient starting labels, not a closed list. Users may name a connector for their own source or purpose, such as “Workshop notes” or “Customer handbook.” Use their chosen name in conversation and a valid stable dataset/pointer identifier in tool inputs; a display name is never an executable command.
+
+For a custom connector, keep a short setup note in the user's project: chosen name, purpose, authorized sources/audience, existing backend and dataset/pointer, preparation steps, refresh responsibility, and known limits. Reuse an appropriate configured connection instead of duplicating its data. The note is an agent-readable recipe, not an automatically discovered plugin manifest; the current panel lists registered pointers, not a separate connector registry.
+
+A new label can reuse the reviewed-local-file workflow. A genuinely new source integration needs an implemented and verified adapter; naming it does not create database/URL fetching or syncing. Developers can build their own integration and connect it through the existing reviewed dataset workflow or trusted `retrievalCommand` extension. Preserve its actual interface, source bindings, scope and explicit approval checks; describe an unbuilt custom adapter as needing implementation, not ready.
+
+## Choose existing data or a blank start
+
+If data already exists, preserve the originals and prepare a searchable view of the authorized scope. Do not require a directory rewrite, database migration, or a new table. Messy or unsupported formats may need extraction and agent review before onboarding; a connector label does not make arbitrary data readable.
+
+If the user is starting from scratch, offer this small optional starting layout. It follows the descriptions, stable references and source checks used by the current workflow; it is not a benchmark-proven optimal format or a hard input requirement. Once the user has asked to create the collection, the agent can build it in the user's project using their actual records—do not invent facts to fill it.
+
+```text
+INDEX.md           # small catalog of records
+records/
+  example.md       # one coherent topic or record per file
+```
+
+Suggested index columns:
+
+| id | description | path |
+|---|---|---|
+| project-setup | Where this project's setup steps and prerequisites are recorded | records/project-setup.md |
+
+Keep IDs stable, descriptions factual and specific, and paths resolvable. Use headings inside records; retain sources for factual claims. Add status, event/effective dates and supersedes links when records change over time; distinguish when a fact applies from when its file was edited. Unknown values remain unknown. Skills instead need valid `name` and `description` frontmatter and their normal `SKILL.md` structure—use the available skill-creation workflow, not the record template.
+
+No user-managed database is needed for this baseline. The index is an authoring aid, not an automatically parsed import contract. The memory `connect` action prepares explicit text-file paths and registers a pointer after agent review; it maintains the manifest and passages internally. Follow the same sample-query and freshness checks below. Do not claim a collection is connected merely because files or an index were created.
+
+Friendly setup hint: “Starting fresh? I can create a small, clearly described collection that works with Super Jev's existing preparation workflow. If you already have data, we can keep its structure and prepare a searchable view instead.” Give this hint when the source is absent or the user asks how to start, not on every successful lookup.
+
+## Set up a new connection or repair an existing one
+
+This is onboarding/repair guidance, not a per-query checklist. Once connected, use the known tool and dataset/pointer directly. Repeat discovery, setup checks or sample tests only when the connection or scope changes or the runtime reports a problem.
+
+1. Identify the connector, exact source scope and authorized audience. Reuse known context; ask only for missing information needed to choose the right data/person. A connector does not grant new access.
+2. Inspect existing setup. For Skills, read sibling `skill-search/SKILL.md` and its roots configuration. For Brain/Documents/Repo, list reviewed datasets through `find --list-datasets`; if local memory is configured, inspect its panel and registered sources. Follow installation-specific `LOCAL-MEMORY.md` and `memory.sh` when present.
+3. Reuse an appropriate ready dataset/pointer. For missing passages, use the `connect` action below with the authorized original text-file paths; the harness creates descriptions, chunks, source bindings and registration. A pointer-only index is not the source content. For a custom reviewed/redacted projection, use the existing sibling `fleet-retrieval-experiment/SKILL.md` preparation workflow instead. Do not treat repo membership as privacy approval.
+4. Run a relevant sample request. Verify returned supporting passages and any approved exact-repeat answer. Report the observed outcome; one successful sample does not prove complete coverage.
+5. Explain coverage and freshness. Reviewed file-based connectors currently require preparation refresh and re-registration after source changes. Existing guards block stale reuse; they do not automatically fetch new material. Missing preparation or uncertainty stays visible. Enabling the assisted loop does not enable automatic answer approval or a scheduler.
+
+## Explain the connection to the human
+
+Keep it short: name the connector, say whether it is ready/needs setup/needs refresh/unavailable, state what is included, and identify any required next step. These are plain-language summaries; preserve actual machine `status` and `nextAction` in the execution record.
+
+Examples (use actual scope and observed results):
+
+- “Your Skills connector searches the configured local skills. New skills need valid name and description metadata to be discoverable.”
+- “Your Brain connector is ready for the reviewed records we selected. Other records still need onboarding; updates require a refresh.”
+- “Your Repo connector uses the reviewed local snapshot at this revision. It does not follow new commits automatically yet.”
+- “A direct database connector is not available yet. We can plan a reviewed export if that suits your needs.”
+
+If data changed, say that the connection needs refreshing rather than that no answer exists. If retrieval needs agent assistance, report that separately from an automatic hit. Never say “your whole brain is connected,” “live synced,” or “always up to date” without evidence of that exact capability and coverage.
+
+## Freshness and manual updates
+
+A source is the underlying file, record, repo checkout, database or webpage. A registered connector may hold only a reviewed snapshot of it. Connected does not mean automatically synchronized.
+
+- Registered local files changed: update/review the preparation and re-register. Known changed bindings block reuse.
+- Export or local copy: obtain the newer export/copy first, then review, rebuild preparation and re-register. Unchanged copies cannot reveal changes upstream. Record who owns this manual refresh.
+- No supporting source yet: the verified-answer workflow needs reviewed material. With authorization, record the user's supplied facts in their project, retain their provenance, then prepare/register them. Do not invent a source or approve unsupported answers.
+
+For a current-state question, briefly say: “This uses the registered snapshot; newer information may exist.” Offer the concrete refresh step when needed, without a repeated onboarding ceremony. Snapshot mode supplies no checked date. Current mode requires a trusted whole-scope `checkedAt` within the requested age; this records the upstream check, not a guarantee that every fact is true or still current. File modification dates, cache approval times and event dates are not substitutes. Warnings never override a stale/refresh refusal. Automated fetching and syncing remain unimplemented.
+
+## Connect local files: paths to searchable passages
+
+Use this when records are missing or a pointer-only dataset returns `preparation-required`. A configured memory runtime is required (`memory --describe` describes it; `memory --principal AGENT` shows that agent's pointers). For a new single-agent connector, use the shortcut below; JSON remains available for shared or custom scopes. There is no positional `memory connect` subcommand.
+
+From the installed skill directory:
+
+```sh
+python3 dispatch.py memory --connect my-records --file /absolute/path/to/record.md --principal YOUR_AGENT_NAME
+```
+
+Repeat `--file` for additional files. This is a local preview, not approval. Review the files and permission, then run the returned **`confirmCommand`** exactly as printed; it binds the reviewed file hashes and uses your configured runtime. No JSON editing is needed. Changed bytes return a new review preview instead of accepting old approval. Use `--replace` only for the same existing single-principal connector; shared connectors or a dataset name different from its pointer use the JSON workflow below.
+
+Alternatively, save a request in your repo's private working area:
+
+```json
+{
+  "action": "connect",
+  "pointer": "example-reviewed",
+  "principals": ["YOUR_AGENT_NAME"],
+  "sources": [{"path": "/absolute/path/to/authorized-record.md"}]
+}
+```
+
+Run `python3 /path/to/super-jev/dispatch.py memory --input /path/to/connect.json`.
+
+The first call returns the preparation/review requirements without publishing a connector. Review the actual source files and permission to send their **entire text** to the configured Jev provider. Use existing authorization where it clearly applies; ask only for genuinely missing permission or scope. Copy the returned source hashes into the request, add `reviewed: true`, and submit it again. Optional factual `description` values help discovery; the harness supplies basic descriptions if omitted. No user chunk-by-chunk ceremony is needed. This confirms source preparation, not the correctness of future answers.
+
+A successful `registered` response means preparation and registration finished. Search using the returned pointer and your principal, check returned evidence, and approve answers only through the existing review flow. Test an actual question before describing the connector as working end to end. Do not call the first review response “connected” or “no matching records.”
+
+Refresh uses the same pointer, dataset and exact principal scope with `replace: true` and newly reviewed source hashes. It invalidates that pointer's prior answers/tickets. Do not use replacement to widen a single-user connector to another person or to add audience members silently. If the old connector is shared or its scope is uncertain, keep it intact and create a separately named connector for the authorized scope.
+
+Initial support is explicit local nonempty UTF-8 text files on macOS/Linux, up to 50 files and 5 MiB per request. Folders, binary/PDF documents and remote URLs need prior authorized extraction or explicit file selection; there is no automatic crawl or live synchronization. The harness preserves originals. Connecting raw private material does not automatically sanitize it: if full text is not authorized for the provider, prepare a reviewed/redacted projection using the existing workflow instead.
+
+### Checked connect
+
+`python3 dispatch.py`'s connect flow trusts the description you write for
+each source; `connect_checked.py` checks that trust first. Given the same
+CONNECT.json, it runs the claim gate on every source's description against
+its own file, and only calls through to connect if every source comes back
+SUPPORTED at or above the confidence line (0.80 by default, `--line` to
+move it). A NOT_SUPPORTED or under-the-line description, or a file over the
+gate's 32k-token ceiling, refuses the whole connect; nothing is registered
+until every source passes. `--check-only` runs just the gate. It writes
+`<name>.verdicts.json` next to the request with each source's verdict and
+sha256. It does not watch for file changes after a connect and does not
+chunk or truncate oversized files — split or drop them and rerun.
+
+### Bulk prepare
+
+`python3 prepare_bulk.py --root DIR [--root DIR2 ...] --pointer NAME
+--principal YOUR_AGENT_NAME [--exclude SUBPATH ...] [--no-recurse] [--limit
+50] [--max-files 250] [--refresh]` is the checked-connect workflow run over a
+whole folder, or a whole agent brain spanning several folders, instead of a
+hand-picked file list. Repeat `--root` to inventory the union of multiple
+roots, in the order given; `--exclude` (repeatable) skips any file whose path
+relative to its root starts with that subpath, and `--no-recurse` limits each
+root to its direct children. `--name GLOB` (repeatable) keeps only files whose
+name matches (case-insensitive; a symlinked file's target must sit under a root or an `--allow-target DIR` and pass the same checks), e.g. `--root ~/.claude/skills --name SKILL.md` connects each skill's
+entry file in place; files that share a name are shown to routing with their
+folder (`ebay-return-label/SKILL.md`). It skips hidden dirs, backups, git worktree copies found below the root (any
+`.claude/worktrees/` folder, or a checkout whose `.git` file points into another repo's
+`.git/worktrees/`; a `--root` that is itself a worktree is connected, since you pointed at it), test/scratch output
+(`ops/sj*/` except `ops/sj-manual/`, `*superjev-test*`, `*-hand-test-*`; a file named
+exactly with `--name` is judged by its folder only) and the folders `profile/`,
+`documents/`, `__pycache__/`, `node_modules/` and `.git/`. Connect says what it left out:
+one `SKIP` line per reason (counts and folder or extension names, never file names or
+paths) for every `.md` file a default rule skipped (in those folders, counted per folder;
+to connect one, connect that folder as its own set with `--root FOLDER --pointer NEW-NAME`,
+since re-running with an existing pointer replaces that set's files; also hidden `.md`
+files, backup or credential-style names, empty files, links pointing outside every `--root`
+(`--allow-target` admits them), prepared dataset copies, test/scratch output and worktree
+copies) and for files of other types, except hidden ones (a hidden file, or anything in a
+hidden folder such as `.git/`, is not counted). Files your own `--exclude`, `--name` or
+`--no-recurse` leave out are not counted, and a skip never changes which files connect or
+the exit code. It holds back any file that looks like it carries
+card/password text or sits over the 250,000-byte size ceiling (a file under it but bigger than one call is gated in parts), writing a
+`prepare-cache/<pointer>-held.txt` with each hold's reason and, for the
+secret-pattern case, the pattern type, line number and a digit-masked line so
+a human can review without opening the file. The card-number check ignores ISO
+dates and URLs first, so a long numeric id in a URL or a run of dates on one
+line cannot trigger a false hold; the password/api-key keyword check is
+unaffected. It also holds a card after an order number, phone number or date
+in the same digit run (`order 1234 4111 1111 1111 1111`, checked with a
+card-network prefix as well as Luhn) and a 15-digit Amex number (`3782 822463
+10005`). A held file has no override flag: a secret hold and a size hold both stay held until the note is edited or split.
+A note over 250,000 bytes is held "too big, split it" (never connected in sections); a file held for secret-like text or name,
+or with a credential/key suffix, is not connected: remove or move the value, then reconnect.
+Every connect ends with `CONNECTED n, HELD m, FAILED k` and exits 0 only when m and k are 0 (1 if anything failed, 3 if anything was held).
+A backslash-escaped quote before a placeholder (`KEY=\"$(cat file)\"` inside a
+code string) counts as a plain quote, so it is not held; after an escaped quote
+only a closed `$(...)`, `${...}` or `<...>` (at most 200 characters) is a placeholder,
+so a literal `\"$3cret9\"` or an unclosed `\"$(Secret9\"` is held. With any quote or none, a placeholder
+must be the whole value (a quote, space, comma, semicolon or end follows it), so
+`"${VAR}hunter2xyz9"` is held. To connect an oversized file, split it into smaller `.md` files (one per `##` section is usually enough) and connect the folder again. Binary or non-UTF-8 files are held too; re-save them as UTF-8 text. A cheap writer model drafts one
+description and one sample question per remaining file; the same claim gate
+used by `connect_checked.py` checks each description against its own file,
+with one rewrite retry on a failure. Only the passing set is connected,
+through the normal preview-then-confirm path; a set larger than `--limit`
+(default 50, the connector's hard per-request cap) is split into parts named
+`<pointer>`, `<pointer>-2`, `<pointer>-3`, ... in stable sorted-path order,
+each connected separately, with the cache and report staying keyed by the
+base pointer. With `--findability` (off by default; one paid search per file), after connecting it re-runs each connected file's own sample
+question through `navigate` and reports whether the file ranks first, as a
+soft findability check, not a pass/fail gate. Results and a cache keyed by
+file hash land under `prepare-cache/` next to the script, so an unchanged
+file is skipped on the next run; `--refresh` additionally drops any cached
+file no longer present on disk from the cache and the connect set, noting it
+in the report, and a reconnect that hits an existing pointer with
+`replace:true` prints a one-line warning that it rotates that pointer's
+approved answers. `--max-files` (default 250) refuses an oversized first
+connect (no cache yet) before any drafting starts. A `--refresh` of an
+already-cached pointer instead guards on the files that actually need a
+writer call this run — unchanged cached files are free and reused, so a
+folder that grew past `--max-files` can still refresh as long as what
+actually changed stays under the cap; raise `--max-files` to opt into a
+larger writer cost. `--no-connect` stops after drafting and gating, for a
+dry run.
+
+By default the writer is `claude -p --model haiku` when the `claude` CLI is
+installed (change the model with `--writer-model`) — a proven cheap default;
+bulk labeling should never run on a premium model. With no `claude` CLI, or
+with `--writer builtin`, a no-model writer quotes each file's own headings as
+its description and leaves the labels unknown; each description is checked locally
+(verdict `QUOTED`), so a builtin connect makes no model call and no Jev call (only `--findability`'s searches do). Every run prints a `writer: <command>` banner naming
+whichever command actually runs, and, when neither `--writer-command` nor the
+`SUPERJEV_WRITER_COMMAND` env var is set, a second line recommending a cheap
+writer and naming that default. Systems without Claude Code can supply
+another local writer, by flag or by env var:
+
+```sh
+python3 prepare_bulk.py --root DIR --pointer NAME --principal YOUR_AGENT_NAME \
+  --writer-command 'my-description-writer --model small'
+
+export SUPERJEV_WRITER_COMMAND='my-description-writer --model small'
+python3 prepare_bulk.py --root DIR --pointer NAME --principal YOUR_AGENT_NAME
+```
+
+`--writer-command` takes precedence over the env var; either is parsed into an argument list and run without a shell.
+
+The writer flags (`--writer`, `--writer-model`, `--writer-command`) are recorded with the pointer's recipe and
+replayed by every `--refresh`: the background refresh an ask starts, the refresh command an ask prints and
+`refresh_changed.py` included. They are one choice: give any one of them on a refresh and the recorded writer is
+replaced whole, and recorded for the refreshes after it; `--writer auto` switches back to auto. The `SUPERJEV_WRITER_COMMAND`
+env var is never recorded. A refresh can run from the skill folder, so name the command on PATH or by absolute path,
+not relative to your folder. The command is stored in `prepare-cache/` and shown in the banner: keep keys out of it
+(have your adapter read them from its own environment).
+
+The program receives the existing UTF-8 writer prompt on standard input: its
+final `FILES:` section is a JSON array of the file records. It must write only
+a JSON array to standard output. Each array member must be an object with
+`path`, `description`, and `question`; `path` must match an input file path.
+The writer should send diagnostics only to standard error. A start failure,
+nonzero exit, or invalid JSON stops the bulk run with an error; writer output
+and diagnostics are never echoed, so command output containing sensitive text
+is not logged by this tool.
+
+For example, a small adapter can read the prompt, parse the text after its
+`FILES:` marker, and emit its result array. It does not need Claude Code or a
+particular model SDK:
+
+```sh
+my-description-writer --model small < prompt.txt > result.json
+```
+
+The writer also drafts four labels per file alongside the description: `kind`
+(dashboard, playbook, ledger, record, index, pointer, research, note),
+`status` (active, closed, paper, done, unknown — using only what the file
+itself states; "NOT FILED"/pending/open counts as active), `as_of` (the date
+the file claims for that status, or unknown), and `subject` (1-4 words). A
+label outside its enum is coerced to `unknown` locally before anything is
+gated, so a bad writer response never crashes the run. Labels are gated in a
+second pass, separate from the description: the description alone must pass
+first (that decides whether the file connects at all, with the one rewrite
+retry described above); only then is the label sentence ("This file is a
+`<kind>` about `<subject>`. Its status is `<status>`[ as of `<as_of>`].")
+gated on its own against the same file. A label problem — under the
+confidence line, `NOT_SUPPORTED`, `CONTRADICTED`, or `ERROR` — never drops
+the file; it resets all four labels to `unknown`, records `labels_verdict`
+and `labels_confidence` in the cache entry, and the file still connects on
+its plain description. Only a file whose labels also gated clean carries them
+in brackets in the connect description, so ranking sees them; this costs two
+judge calls per file whose description passes (one when it doesn't).
+`python3 prepare_bulk.py --list [--pointer NAME] [--principal YOUR_AGENT_NAME]
+[--status active] [--kind dashboard] [--within-days 30] [--subject NAME]`
+reads the labels back out of `prepare-cache/<pointer>.json` (and any
+`<pointer>-N.json` part caches) with `--pointer`, and out of that principal's
+`ask.py --add` manual records (shown as `<principal>-manual-*` in the path
+column) with `--principal`; either or both may be given, and at least one is
+required. Filters and sorts the merged rows by `as_of` descending, and never
+calls the writer, the gate, or memory; `--within-days` excludes rows whose
+`as_of` is unknown and reports how many were excluded. A label is only as
+true as the file or record it came from; `as_of` shows staleness, not
+currency — live truth for anything time-sensitive still needs a gated
+roll-up read fresh, not a cached label.
+
+### Watched folders
+
+`prepare_bulk.py --watch|--unwatch --pointer NAME --principal AGENT` marks a connected pointer watched (the engine's `watch`/`unwatch` actions plus `"watched": true` in its report), so new files, subfolders and changed files under its folders are taken in on a later ask. The engine holds one rule on every connect and register: a file whose real path lies under a watched folder may only be registered to a pointer whose agents are a subset of the watched pointer's; otherwise it answers `reason: watched-refused` with a `message` that names the watched pointer and the clearing command, and the `files` refused. `watched-check` (`pointer`, `principals`, `paths`) is the read-only dry run of the same rule, so a caller can leave those files out and register the rest. See the connect skill for what a person sees.
+
+### Share a connected pointer
+
+`python3 share_pointers.py --principal AGENT --pointer NAME` (repeat either;
+exact pointer names, no globs; `--dry-run` lists what would change) lets more principals see a pointer that is already connected.
+It calls the memory `register` action with the pointer's current dataset and
+its principals plus the new ones: no reconnect, no writer, no Jev call, so it
+costs nothing. A connect with `replace:true` cannot do this; it refuses any
+change of principals as `scope-change`. `register` starts a new generation, so
+the pointer's cached and pending answers are dropped (the count is printed
+first); keep shared pointers to reference sets. Every connection is private
+until a person marks it shareable (`prepare_bulk.py --shareable` at connect, or
+`share_pointers.py --principal AGENT --mark NAME` later; `--unmark` reverts;
+refreshes keep the mark; no agent is assumed, so name one or set
+`SUPERJEV_PRINCIPAL`). An unmarked pointer is refused (printed, skipped), and a pointer with any
+original source under an agent's brain (`~/agents/<bot>-brain/`) or in a
+`documents/` or `profile/` folder is refused and cannot be marked. A stale pointer
+(`preparation-required`) must be refreshed before it can be shared. A later
+refresh keeps the shared scope: `prepare_bulk.py` and the recipe heal retry
+with the registered principals on `scope-change`.
+
+Onboarding default: `<state dir>/shared-pointers.json`
+(`{"pointers": ["fleet-knowledge", "main-skills-catalog", "main-skills-catalog-2"]}`, or the file
+named by `SUPERJEV_SHARED_POINTERS`) lists the fleet's shared sets, such as
+the shared knowledge folder and the skills catalog. After every fully
+connected `prepare_bulk.py` run, each `--principal` is added to every pointer
+on that list (`--no-shared` skips it), so a new agent sees the shared sets and
+not only its own brain. `share_pointers.py --principal AGENT --shared` applies
+the list to an agent that is already connected. `dispatch.py
+audit-visibility` does not flag a pointer on the list as
+visible-but-not-connected.
+
+### Ask loop
+
+`python3 ask.py --principal YOUR_AGENT "question"` is the front door over
+everything above: harness `cached` action first (no local map, zero provider
+calls), then every connected pointer in parallel. State (`lookups.jsonl`,
+`manual/`) lives under `$SUPERJEV_STATE_DIR` or
+`~/.local/state/super-clef/<principal>/`, never inside a repo checkout.
+`--add "question" "answer" [--source /path]` records a fact with no file as
+its own one-file `<principal>-manual-<hash>` pointer, so it never replaces or
+invalidates any other pointer's approved answers; a later cache hit on that
+pointer re-hashes `--source` and warns if the original file changed.
+
+`--add` also takes `--subject TEXT`, `--kind KIND`, `--status STATUS`, and
+`--as-of YYYY-MM-DD`, the same enums bulk prepare gates (`kind`: record, note,
+pointer, index, dashboard, playbook, ledger, research; `status`: active,
+closed, paper, done, unknown), defaulting to `record`/`active`/today/the
+question's first four meaningful words. An invalid value is a usage error,
+never silently coerced. The record's header carries these as `kind:`,
+`status:`, `as_of:`, `subject:`, and `project:` lines, and the connect
+description carries them in the same bracket format bulk prepare uses, so
+`prepare_bulk.py --list --principal YOUR_AGENT` sees manual entries alongside
+bulk-onboarded files. Re-adding the same wording normally refuses;
+`--replace-entry` instead removes the existing manual pointer for that exact
+wording and its record first, then adds fresh.
+
+## Navigation structure
+
+Record how the connected view is organized at onboarding. Supported structures are `flat-files` (default) and `folder-tree`. These describe only the explicit reviewed source set, not the entire disk. The connector exposes stable node IDs, a root, and available navigation actions. A database or arbitrary graph is not silently treated as a tree; direct database ingestion and automatic index-link parsing remain unsupported.
+
+For an existing folder layout, preview the same explicit files with:
+
+```sh
+python3 dispatch.py memory --connect project-docs --structure folder-tree --file /project/docs/setup.md --file /project/docs/operations/release.md --principal YOUR_AGENT_NAME
+```
+
+Review the proposed navigation metadata as well as source scope and permission, then run the returned `confirmCommand`. It preserves the reviewed structure and metadata hash. No directory crawling occurs; only supplied files enter the view. A folder-tree derives groups from their parent directories. Source descriptions should explain what each file actually contains; structure alone does not establish relevance.
+
+For agent-authored groupings such as an index of brain records, the JSON `connect` workflow can supply each source's `navigationPath`, an array of group labels, with `structure:"folder-tree"`. For example a source may have `"navigationPath":["Projects","Super Jev"]`. This is an explicit reviewed projection, not permission to follow links or read additional files. Use the preview's navigation metadata hash when confirming. Originals stay unchanged. Refresh an existing structure with the normal reviewed `replace:true` flow.
+
+To locate candidate files, save this request in the caller repo's private working area and run `memory --input`:
+
+```json
+{"action":"navigate","pointer":"project-docs","principal":"YOUR_AGENT_NAME","question":"Where are deployment rollback instructions?","limits":{"beamWidth":3,"maxRounds":6,"maxResults":3}}
+```
+
+The harness presents the root's options to Jev, retains several promising routes, opens their registered children, and repeats within the limits. It tracks visited branches and limits exploration. Returned source locations remain bound to the registered reviewed snapshot and authorized pointer; stale sources must be refreshed. Existing pre-navigation pointers use a flat view of their already registered descriptions.
+
+`candidates` means inspect these files. `no-candidates` means no file was selected in this bounded run. `budget-exhausted` means the exploration limit was reached. None of these statuses approves an answer, proves that the answer is absent, or writes the answer cache. Keep `search` for passage retrieval and the existing explicit approval flow for verified reuse. Navigation is advisory even if a ranking score is high.
+
+Design reference: [TypeSafe hierarchical classification](https://docs.typesafe.ai/cookbooks/hierarchical_classification) keeps multiple paths instead of making a single irreversible branch choice. This implementation bounds traversal over registered local sources; it is not a general crawler or a claim of universal file-finding accuracy.
+
+For everyday file finding, start with `flat-files`. Folder-tree is experimental: pruning a folder can hide relevant files, especially when a question needs files in separate folders. After navigation, read candidate files before answering; suggestions do not establish support or absence. For an existing connector whose source bytes changed, refresh with the same pointer and scope plus `replace:true` (CLI `--replace`), review current hashes, and confirm before retrying.
+
+## GitHub repo history
+
+Use this as "have we tried this before?" memory for a repo.
+
+```sh
+python3 connect_github.py OWNER/REPO --pointer myrepo-history --principal YOUR_AGENT_NAME
+python3 connect_github.py OWNER/REPO --pointer myrepo-history --principal YOUR_AGENT_NAME --refresh   # after each merge
+```
+
+`superjev connect-github ...` is the same command. It needs the `gh` CLI signed in to an account that can read the repo; it never reads or prints the token itself.
+
+- Export: one file per item under `$SUPERJEV_STATE_DIR/<principal>/github/<owner>-<repo>/` (`--out DIR` to choose): `prs/pr-N.md`, `issues/issue-N.md`, `commits/commit-SHA7.md`, `releases/release-TAG.md`. The title line leads each file so the item is findable by its title.
+- Secrets: every line that trips the shared secret scan (`secret_patterns.json`) is dropped before writing, and `prepare_bulk.py` scans again. The count of dropped lines is printed. Private-repo text still goes to the configured Jev provider; connect only repos you are allowed to send.
+- Connect: the folder goes through the normal `prepare_bulk.py` path (writer, gates, parts of 50; findability only with `--findability`). Writer flags pass through.
+- Refresh: `.github-sync.json` in the export folder records the last export time; `--refresh` asks `gh` only for PRs/issues updated since then, commits since then, and newer releases, rewrites those files, and re-prepares the pointer with `--refresh`. Nothing changed means nothing is re-prepared. A first `--refresh` does a full export. Deleted or transferred items are not removed automatically.
+- `--no-connect` exports only, for review before connecting.

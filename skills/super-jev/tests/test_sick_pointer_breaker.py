@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""Sick-pointer circuit breaker: per-pointer failure/latency tracking, benching
+after N consecutive failures, one backoff retry on a 529/overloaded navigate,
+and partial-success lookups that keep the failure visible without failing the
+whole call. All offline: `ask.memory` is monkeypatched, state dir is tmp_path.
+
+    python3 -m pytest skills/super-jev/tests/test_sick_pointer_breaker.py -q
+"""
+import importlib.util
+import json
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+SKILL = Path(__file__).resolve().parent.parent
+SCRIPT = SKILL / "ask.py"
+
+spec = importlib.util.spec_from_file_location("ask_sick_pointer", SCRIPT)
+ask = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ask)
+
+
+@pytest.fixture(autouse=True)
+def no_content_check(monkeypatch):
+    monkeypatch.setattr(ask, "confirm", lambda question, paths: ({p: .9 for p in paths}, set(), None, {}))
+
+
+def test_pointer_benched_after_threshold_consecutive_failures():
+    health = {}
+    for _ in range(ask.BENCH_FAIL_THRESHOLD):
+        ask.record_pointer_outcome(health, "flaky", ok=False, elapsed=1.0)
+    benched, remaining, fails = ask.pointer_benched(health, "flaky")
+    assert benched is True
+    assert fails == ask.BENCH_FAIL_THRESHOLD
+    assert remaining > 0
+
+
+def test_pointer_not_benched_below_threshold():
+    health = {}
+    for _ in range(ask.BENCH_FAIL_THRESHOLD - 1):
+        ask.record_pointer_outcome(health, "flaky", ok=False, elapsed=1.0)
+    benched, _, _ = ask.pointer_benched(health, "flaky")
+    assert benched is False
+
+
+def test_a_success_resets_the_failure_streak():
+    health = {}
+    for _ in range(ask.BENCH_FAIL_THRESHOLD):
+        ask.record_pointer_outcome(health, "flaky", ok=False, elapsed=1.0)
+    ask.record_pointer_outcome(health, "flaky", ok=True, elapsed=1.0)
+    benched, _, fails = ask.pointer_benched(health, "flaky")
+    assert benched is False
+    assert fails == 0
+
+
+def test_benched_pointer_expires_after_cooldown(monkeypatch):
+    health = {}
+    for _ in range(ask.BENCH_FAIL_THRESHOLD):
+        ask.record_pointer_outcome(health, "flaky", ok=False, elapsed=1.0)
+    # Push the last failure outside the cooldown window.
+    health["flaky"]["last_fail_ts"] = time.time() - ask.BENCH_COOLDOWN_SECS - 1
+    benched, remaining, _ = ask.pointer_benched(health, "flaky")
+    assert benched is False
+    assert remaining == 0
+
+
+def test_lookup_benches_a_pointer_with_a_prior_failure_streak_and_reports_it(tmp_path, monkeypatch, capsys):
+    sdir = tmp_path / "state"
+    health = {}
+    for _ in range(ask.BENCH_FAIL_THRESHOLD):
+        ask.record_pointer_outcome(health, "sick", ok=False, elapsed=1.0)
+    ask.save_pointer_health(sdir, health)
+
+    calls = []
+
+    def fake_memory(req):
+        calls.append((req["action"], req.get("pointer")))
+        if req["action"] == "cached":
+            return {"status": "cache-miss", "checked": []}
+        if req["action"] == "panel":
+            return {"pointers": ["sick", "healthy"]}
+        if req["action"] == "navigate" and req["pointer"] == "healthy":
+            return {"status": "candidates", "candidates": [{"score": 0.9, "originalPath": "/ok.md"}]}
+        raise AssertionError(f"navigate should never be called on a benched pointer: {req}")
+
+    monkeypatch.setattr(ask, "memory", fake_memory)
+    rc = ask.lookup("q", "alice", sdir)
+
+    assert ("navigate", "sick") not in calls
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "[sick] benched" in out
+    assert "/ok.md" in out
+
+
+def test_overloaded_navigate_is_not_retried_here_and_counts_as_a_failure(tmp_path, monkeypatch):
+    """The judge's one retry rule runs inside the call; a failure that reaches ask.py is final."""
+    sdir = tmp_path / "state"
+    attempts = {"n": 0}
+
+    def fake_memory(req):
+        if req["action"] == "cached":
+            return {"status": "cache-miss", "checked": []}
+        if req["action"] == "panel":
+            return {"pointers": ["p1"]}
+        if req["action"] == "navigate":
+            attempts["n"] += 1
+            return {"status": "error", "reason": "Jev HTTP 529 overloaded"}
+        raise AssertionError(req)
+
+    monkeypatch.setattr(ask, "memory", fake_memory)
+    rc = ask.lookup("q", "alice", sdir)
+
+    assert attempts["n"] == 1
+    assert rc == 3  # error
+    health = ask.load_pointer_health(sdir)
+    assert health["p1"]["fails"] == 1
+
+
+def test_partial_pointer_failure_still_returns_healthy_results_rc0(tmp_path, monkeypatch, capsys):
+    sdir = tmp_path / "state"
+
+    def fake_memory(req):
+        if req["action"] == "cached":
+            return {"status": "cache-miss", "checked": []}
+        if req["action"] == "panel":
+            return {"pointers": ["broken", "healthy"]}
+        if req["action"] == "navigate" and req["pointer"] == "broken":
+            return {"status": "error", "reason": "Navigation provider failed"}
+        if req["action"] == "navigate" and req["pointer"] == "healthy":
+            return {"status": "candidates", "candidates": [{"score": 0.9, "originalPath": "/ok.md"}]}
+        raise AssertionError(req)
+
+    monkeypatch.setattr(ask, "memory", fake_memory)
+    rc = ask.lookup("q", "alice", sdir)
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "/ok.md" in out
+    assert "[broken]" in out
+    assert out.startswith("OUTCOME: found - 1 file; partial: 1 set not searched")
+
+
+def test_preparation_required_never_counts_toward_the_fail_streak():
+    health = {}
+    for _ in range(ask.BENCH_FAIL_THRESHOLD * 2):
+        ask.record_pointer_outcome(health, "stuck", ok=False, elapsed=1.0, stale=True)
+    benched, _, fails = ask.pointer_benched(health, "stuck")
+    assert benched is False
+    assert fails == 0
+
+
+def test_preparation_required_does_not_erase_a_real_prior_fail_streak():
+    health = {}
+    for _ in range(ask.BENCH_FAIL_THRESHOLD - 1):
+        ask.record_pointer_outcome(health, "flaky", ok=False, elapsed=1.0)
+    # A stale reading in between real errors must not reset the streak either.
+    ask.record_pointer_outcome(health, "flaky", ok=False, elapsed=1.0, stale=True)
+    ask.record_pointer_outcome(health, "flaky", ok=False, elapsed=1.0)
+    benched, _, fails = ask.pointer_benched(health, "flaky")
+    assert benched is True
+    assert fails == ask.BENCH_FAIL_THRESHOLD
+
+
+def test_principals_own_brain_root_is_never_benched():
+    health = {}
+    for _ in range(ask.BENCH_FAIL_THRESHOLD * 5):
+        ask.record_pointer_outcome(health, "testbot-brain-root", ok=False, elapsed=1.0)
+    benched, _, _ = ask.pointer_benched(health, "testbot-brain-root", "testbot")
+    assert benched is False
+    # A split root (root-2, root-3, ...) is covered the same way.
+    for _ in range(ask.BENCH_FAIL_THRESHOLD * 5):
+        ask.record_pointer_outcome(health, "testbot-brain-root-2", ok=False, elapsed=1.0)
+    benched2, _, _ = ask.pointer_benched(health, "testbot-brain-root-2", "testbot")
+    assert benched2 is False
+    # Another principal's root pointer is a different bot's brain and still benches normally.
+    for _ in range(ask.BENCH_FAIL_THRESHOLD):
+        ask.record_pointer_outcome(health, "testbot-brain-root", ok=False, elapsed=1.0)
+    benched3, _, _ = ask.pointer_benched(health, "testbot-brain-root", "other-bot")
+    assert benched3 is True
+
+
+def test_lookup_never_benches_or_skips_the_principals_own_brain_root(tmp_path, monkeypatch, capsys):
+    sdir = tmp_path / "state"
+    health = {}
+    for _ in range(ask.BENCH_FAIL_THRESHOLD * 3):
+        ask.record_pointer_outcome(health, "testbot-brain-root", ok=False, elapsed=1.0)
+    ask.save_pointer_health(sdir, health)
+
+    calls = []
+
+    def fake_memory(req):
+        calls.append((req["action"], req.get("pointer")))
+        if req["action"] == "cached":
+            return {"status": "cache-miss", "checked": []}
+        if req["action"] == "panel":
+            return {"pointers": ["testbot-brain-root"]}
+        if req["action"] == "navigate":
+            return {"status": "preparation-required"}
+        raise AssertionError(req)
+
+    monkeypatch.setattr(ask, "memory", fake_memory)
+    rc = ask.lookup("q", "testbot", sdir)
+
+    assert ("navigate", "testbot-brain-root") in calls
+    assert rc == 4  # needs-setup
+    out = capsys.readouterr().out
+    assert "[testbot-brain-root]" in out
+    assert "[STALE]" in out
+    assert "benched" not in out
+
+
+def test_stale_error_line_is_marked_stale(tmp_path, monkeypatch, capsys):
+    def fake_memory(req):
+        if req["action"] == "cached":
+            return {"status": "cache-miss", "checked": []}
+        if req["action"] == "panel":
+            return {"pointers": ["p1"]}
+        if req["action"] == "navigate":
+            return {"status": "preparation-required"}
+        raise AssertionError(req)
+
+    monkeypatch.setattr(ask, "memory", fake_memory)
+    rc = ask.lookup("q", "alice", tmp_path)
+
+    assert rc == 4  # needs-setup
+    out = capsys.readouterr().out
+    assert "[p1] preparation-required" in out
+    assert "[STALE]" in out
+
+
+def test_all_pointers_failing_still_exits_1_with_no_healthy_result(tmp_path, monkeypatch, capsys):
+    sdir = tmp_path / "state"
+
+    def fake_memory(req):
+        if req["action"] == "cached":
+            return {"status": "cache-miss", "checked": []}
+        if req["action"] == "panel":
+            return {"pointers": ["broken"]}
+        if req["action"] == "navigate":
+            return {"status": "error", "reason": "Navigation provider failed"}
+        raise AssertionError(req)
+
+    monkeypatch.setattr(ask, "memory", fake_memory)
+    rc = ask.lookup("q", "alice", sdir)
+
+    assert rc == 3  # error
+    out = capsys.readouterr().out
+    assert out.startswith("OUTCOME: error - no match, and 1 set failed")
