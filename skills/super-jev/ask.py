@@ -3607,10 +3607,12 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
         # content-score ties; stable paths break the remaining ties.
         merged = sorted(keep.values(), key=lambda m: (
             notes.get(m[1]) != INCONCLUSIVE, m[0], route.get(m[1], 0), m[1]), reverse=True)
-        if CLEF and check_error:
-            # A dead judge ranks nothing: keep the read list's order (routing, then word search), not path order.
+        if CLEF:
+            # Clef ranks one file at most: the files it did not pick keep the read list's order (word search's best
+            # hits, then the TOC pick's), not path order; a dead judge ranks nothing, so all of them keep it.
             order = {p: i for i, p in enumerate(to_check)}
-            merged.sort(key=lambda m: order.get(m[1], len(order)))
+            merged.sort(key=lambda m: (not check_error and notes.get(m[1]) != INCONCLUSIVE, -order.get(m[1], len(order))),
+                        reverse=True)
         if CLEF:
             possible.update({p: POSSIBLE_NOTE for p in _CLEF["low_trust"] if p in keep})
             if _CLEF["strong_none"]:

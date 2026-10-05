@@ -401,7 +401,11 @@ def run(question: str, corpus: dict, hits: list, ask: dict, cache_path=None, jud
         has = {p: [(t in docs[p] or (len(t) > 5 and t[:5] in docs[p])) for t in terms] for p in corpus}
         df = [sum(h[i] for h in has.values()) for i in range(len(terms))]
         w = [math.log((len(corpus) + 1) / (1 + d)) for d in df]
-        ranked = sorted(corpus, key=lambda p: (-sum(wi for wi, h in zip(w, has[p]) if h), p))
+        # a word in the file's own name counts twice: a file named for the topic leads ties of the same words
+        names = {p: (fold(os.path.basename(p)) if fold else os.path.basename(p).lower()) for p in corpus}
+        named = {p: [(t in names[p] or (len(t) > 5 and t[:5] in names[p])) for t in terms] for p in corpus}
+        ranked = sorted(corpus, key=lambda p: (-sum(wi for wi, h in zip(w, has[p]) if h) -
+                                                sum(wi for wi, n in zip(w, named[p]) if n), p))
     else:
         ranked = sorted(corpus, key=lambda p: (-ask["term_hits"](terms, toc_words(p, entries[p], tocs[p])), p))
     pool = list(dict.fromkeys(hit_paths + ranked))[:POOL_CAP]
