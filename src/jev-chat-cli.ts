@@ -334,7 +334,7 @@ export async function run(io: IO): Promise<number> {
         } finally { term.close(); }
       } else {
         r = await connectFlow(t, async () => false);
-        stderr.write(`Connecting needs a keyboard to confirm: ${OPEN}, then drag the folder in.\n`);
+        stderr.write(`Connecting needs a keyboard to confirm: run superclef connect <folder> in a terminal.\n`);
       }
       return finish(r);
     }
