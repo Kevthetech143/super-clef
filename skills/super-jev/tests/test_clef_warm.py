@@ -250,3 +250,12 @@ def test_live_cold_then_warm_then_idle_exit_and_clean_tmp(monkeypatch):
     time.sleep(40)  # idle 20 s: the daemon exits and frees the model
     assert ssh("ps -axo command | grep '[c]lef-test/.venv/bin/python\\|[p]ython - --idle' | wc -l").strip() == "0"
     assert ssh("ls ~/.clefd/sock 2>/dev/null | wc -l").strip() == "0"
+
+
+def test_idle_secs_setting_parse_and_default():
+    assert clef_client._idle_secs("") == clef_client.DEFAULT_IDLE_SECS == 7200
+    assert clef_client._idle_secs("abc") == 7200
+    assert clef_client._idle_secs("30") == 7200
+    assert clef_client._idle_secs("-5") == 7200
+    assert clef_client._idle_secs("3600") == 3600
+    assert clef_client._idle_secs(" 90 ") == 90
