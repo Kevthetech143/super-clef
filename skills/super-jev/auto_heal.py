@@ -50,6 +50,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import superclef_env  # noqa: E402,F401  (SUPERCLEF_* -> SUPERJEV_*, before anything reads env)
 import refresh_changed as rc  # noqa: E402
 
 STATE_DIR = HERE / "autoheal-state"
