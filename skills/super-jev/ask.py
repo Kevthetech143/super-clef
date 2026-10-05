@@ -2309,7 +2309,7 @@ def index_fts_pass(idx, pointers: list, widx: dict, toc) -> int:
 def _fts_q(tokens) -> str:
     return " OR ".join(f'"{t}"' for t in sorted(tokens))
 
-def fts_pick(idx, question: str, pointers: list, who, out_of_scope_fn):
+def fts_pick(idx, question: str, pointers: list, who, out_of_scope_fn, synonyms=SYNONYMS):
     """The O(K) read path: (candidates [(ptr, path, entry)], items {path: word item}, toc rows, fts numbers for
     word_search, trace), or (None, why) to run the S3a path. Takes the top FTS_K files by bm25 on the question's
     words and the top FTS_K by bm25 on the TOC words, plus the few edited files; nothing else is touched."""
@@ -2321,7 +2321,7 @@ def fts_pick(idx, question: str, pointers: list, who, out_of_scope_fn):
         return None, "no question words"
     try:
         who = sorted(who)
-        variants = idx.fts_variants(terms, SYNONYMS)
+        variants = idx.fts_variants(terms, synonyms)
         df = {t: idx.fts_df("body : (" + _fts_q(v) + ")", pointers, who) if v else 0 for t, v in variants.items()}
         allv = set().union(*variants.values())
         wtop = idx.fts_top("body : (" + _fts_q(allv) + ")", pointers, FTS_K, who) if allv else []
@@ -2504,7 +2504,7 @@ def _valid_item(item, sha) -> bool:
             and all(isinstance(p, list) and len(p) == 3 and isinstance(p[0], dict) and isinstance(p[1], int)
                     and isinstance(p[2], list) for p in item["passages"]))
 
-def term_variants(terms: list, vocab) -> dict:
+def term_variants(terms: list, vocab, synonyms=SYNONYMS) -> dict:
     """{term: the vocabulary words that count as that term} (close spellings, stem/ending forms, synonyms)."""
     out = {}
     for t in terms:
@@ -2512,11 +2512,11 @@ def term_variants(terms: list, vocab) -> dict:
         stem = t[:5] if len(t) > 5 else t  # long words by stem, short ones plus an ending (owe/owed)
         out[t] = near | {v for v in vocab if v.startswith(stem) and len(v) - len(t) <= (99 if len(t) > 5 else 2)}
         # A synonym counts as a match for its source word, not as an extra word.
-        out[t] |= {x for x in SYNONYMS.get(t, []) if x in vocab}
+        out[t] |= {x for x in synonyms.get(t, []) if x in vocab}
     return out
 
 def word_search(question: str, pointers: list, limit: int = FALLBACK_FILES, skip=(), extra=(), held_cover=None,
-                reads=None, index_path=None, candidates=None, items=None, fts=None, read_paths=()) -> list:
+                reads=None, index_path=None, candidates=None, items=None, fts=None, read_paths=(), synonyms=SYNONYMS) -> list:
     """Local, no provider calls: [(score, path, pointer)] of the principal's reviewed
     files best matching the question's words (BM25 per CONFIRM_CHUNK passage, a file
     scores its best passage; a file's path, description and stored question count triple
@@ -2582,7 +2582,7 @@ def word_search(question: str, pointers: list, limit: int = FALLBACK_FILES, skip
     if dirty and index_path:
         _save_word_index(index_path, index)
     def variants_of(vocab):
-        return term_variants(terms, vocab)
+        return term_variants(terms, vocab, synonyms)
     if aside and held_cover is not None:
         # Edited files a refresh would hold: coverage only, scored against the same corpus plus themselves.
         counts = [Counter(wc) + Counter({w: v * npass for w, v in hw.items()})
@@ -3024,6 +3024,19 @@ def person_of(path: str, homes: dict):
             return homes[str(d)][0]
     return None
 
+def kin_synonyms(question: str, who: set, folks: dict) -> dict:
+    """SYNONYMS plus, for a kin word the question resolved to person folders ("my mom" -> nora), those folders'
+    names: a note in nora/ that says "Nora" and never "mom" still matches "mom". It only adds a match; a group
+    word or a relation no folder claims resolves no one, and nothing changes."""
+    syn = dict(SYNONYMS)
+    for t in query_terms(question):
+        kin = t if t in RELATIONS else t[:-1] if t.endswith("s") and t[:-1] in RELATIONS else None  # "mom's" -> moms
+        if kin and kin != "self":
+            names = [w for n in sorted(who) if RELATIONS[kin] in folks.get(n, ()) for w in words(n)]
+            if names:
+                syn[t] = [*syn.get(t, []), *names]
+    return syn
+
 def question_people(question: str, folks: dict) -> set:
     """Whose records the question is about: a relation word ("my dad") wins,
     and person folder names ("belinda's") add their folders; "I"/"me" adds the
@@ -3031,6 +3044,7 @@ def question_people(question: str, folks: dict) -> set:
     A group word, or a relation no folder claims, filters nothing.
     Empty set = no one resolved, nothing is filtered."""
     words = {w.removesuffix("'s").strip("'") for w in re.findall(r"(?:[^\W\d_]|')+", fold(question))}
+    words = {w[:-1] if w not in RELATIONS and w[:-1] in RELATIONS and w.endswith("s") else w for w in words}  # "moms"
     if words & GROUP_WORDS:
         return set()
     rel = {RELATIONS[w] for w in words if w in RELATIONS and w != "self"}
@@ -3272,6 +3286,7 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
     who = question_people(question, folks)
     def other_person(path: str) -> bool:
         return bool(who) and person_of(path, homes) not in (None, *who)
+    syn = kin_synonyms(question, who, folks)
     _STAGE["person"] = {"who": sorted(who), "dropped": []}
     if who:
         _STAGE["person"]["skipped_pointers"] = [ptr for ptr in pointers if (files := load_cache_files(ptr))
@@ -3520,7 +3535,7 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
             ix_ptrs = [p for p in search_pointers if p not in index_fb]
             ix_ptrs = index_served(idx_read.coverage(), ix_ptrs)
             fb_ptrs = [p for p in search_pointers if p not in ix_ptrs]
-            picked, fwhy = fts_pick(idx_read, question, ix_ptrs, who, other_person) if ix_ptrs else (None, "the index holds none of the searched pointers")
+            picked, fwhy = fts_pick(idx_read, question, ix_ptrs, who, other_person, syn) if ix_ptrs else (None, "the index holds none of the searched pointers")
             if picked:
                 icands, fitems, ftocs, fts_nums, ftrace = picked
                 out_of_scope = set()  # the FTS scope already left out other people's files
@@ -3568,7 +3583,7 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
     held_cover = {}  # a held file's word coverage of the question, from the same word-search pass
     toc_on = not _CLAIM["text"]
     found = word_search(question, search_pointers, skip=(out_of_scope if toc_on else set(routed[:CONFIRM_FILES]) | out_of_scope),
-                        reads=reads, index_path=None if fts_nums else sdir / WORD_INDEX_FILE,
+                        reads=reads, index_path=None if fts_nums else sdir / WORD_INDEX_FILE, synonyms=syn,
                         **({"candidates": icands, "read_paths": fb_paths - vouched} if idx_read else {}),
                         **({"items": fitems, "fts": fts_nums} if fts_nums else {}),
                         **({"extra": set(edited["secret"]), "held_cover": held_cover} if edited["secret"] else {}))

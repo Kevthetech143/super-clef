@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **"My mom" finds the mom's files that never say "mom".** A person folder is now any connected folder whose PROFILE file has a `Relation:` line (it was only the fleet path `documents/<name>/`, so another layout had no people at all). When a kin word in the question (`mom`, `mom's`, `moms`) resolves to a person folder, that folder's name counts as a match for the word in the word search and the FTS shortlist, so a note that says "Nora" and never "mom" passes coverage. It only adds a match: a file saying "mom" still matches, and a group word ("my parents"), a relation no folder claims ("my aunt") or a question naming the person changes nothing. A possessive `moms` now resolves like `mom's` (it fell back to the asker's own folder). No provider calls; the index rewrites only the rows whose person moved (no version bump). Tests: `skills/super-jev/tests/test_kin_word.py`.
+
 ## 0.3.3 — 2026-10-05
 
 - **Clef's free table-of-contents shortlist finds files named for the topic.** With the clef judge the TOC pick is free word work (no judge call): a question word in the file's own name now counts twice, so a file whose name carries the question's words but whose text uses other words reaches the TOC slots (the word search's three best hits still come first). The files clef did not pick now keep the read order (word hits, then the TOC shortlist) instead of reverse path order, the rule a dead judge already used. Jev's pick is unchanged. A clef judge pick over the TOC pages was tried and measured: no gain on held-out questions, about 10 s more per ask, so it is not shipped.

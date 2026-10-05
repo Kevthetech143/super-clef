@@ -86,3 +86,53 @@ def test_index_moves_the_person_without_a_version_bump(tmp_path, monkeypatch):
     idx = FileIndex(PRINCIPAL, sdir / "index.sqlite")
     assert person()[str(root / NORA)] == "nora" and person()[str(root / DADS)] == "gustavo"
     assert idx.fts_usable(ask.WORD_INDEX_VERSION)[0]
+
+
+@pytest.mark.parametrize("fts", [False, True])
+def test_kin_word_reaches_the_folder_that_never_says_it(tmp_path, monkeypatch, capsys, fts):
+    root, _names, sdir = family(tmp_path, monkeypatch)
+    if fts:
+        sync(sdir)
+    flag(monkeypatch, fts)
+    for q in (ASK, "what's still open for my mom's care?", "whats open for moms care"):
+        out = found(q, sdir, capsys, monkeypatch)
+        assert (json.loads((sdir / "traces.jsonl").read_text().splitlines()[-1])["stages"].get("index") or {}).get(
+            "fts", {}).get("used", False) is fts
+        assert str(root / NORA) in out, (q, out)  # past coverage, in the top 5
+        assert str(root / DECOY) in out  # a file literally saying "mom" still matches
+        assert str(root / DADS) not in out
+
+
+@pytest.mark.parametrize("fts", [False, True])
+def test_group_word_unclaimed_kin_and_names_change_nothing(tmp_path, monkeypatch, capsys, fts):
+    _root, names, sdir = family(tmp_path, monkeypatch)
+    if fts:
+        sync(sdir)
+    flag(monkeypatch, fts)
+    folks = ask.people(names)
+    qs = ("what's still open for my parents?", "what's still open for my aunt?", "what's still open for nora?",
+          "what is open for gustavo and nora")
+    for q in qs:
+        assert ask.kin_synonyms(q, ask.question_people(q, folks), folks) == ask.SYNONYMS, q
+    got = [found(q, sdir, capsys, monkeypatch) for q in qs]
+    monkeypatch.setattr(ask, "kin_synonyms", lambda *a: ask.SYNONYMS)  # the word search without the kin variant
+    assert got == [found(q, sdir, capsys, monkeypatch) for q in qs]
+
+
+def test_possessive_kin_word_resolves_the_folder():
+    folks = {"nora": {"mother"}, "gustavo": {"father"}, "marvin": {"self"}}
+    for q in ("whats open for moms care", "what's open for my mom's care", "my dads meds"):
+        assert ask.question_people(q, folks) == ({"gustavo"} if "dad" in q else {"nora"}), q
+    assert ask.question_people("what did my aunts say", folks) == set()  # no folder claims it: nothing filtered
+
+
+def test_kin_word_makes_no_provider_call(tmp_path, monkeypatch, capsys):
+    root, _names, sdir = family(tmp_path, monkeypatch)
+    sync(sdir)
+    calls = []
+    monkeypatch.setattr(ask.subprocess, "run", lambda *a, **k: calls.append(a) or pytest.fail("provider call"))
+    monkeypatch.setattr(ask.subprocess, "Popen", lambda *a, **k: calls.append(a) or pytest.fail("provider call"))
+    for fts in (False, True):
+        flag(monkeypatch, fts)
+        assert str(root / NORA) in found(ASK, sdir, capsys, monkeypatch)
+    assert calls == []
