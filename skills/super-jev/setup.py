@@ -37,6 +37,7 @@ from pathlib import Path
 SKILL_DIR = Path(__file__).resolve().parent
 REPO = SKILL_DIR.parent.parent
 sys.path.insert(0, str(SKILL_DIR))
+import superclef_env  # noqa: E402,F401  (SUPERCLEF_* -> SUPERJEV_*, before anything reads env)
 import judges  # noqa: E402
 # prepare_bulk.py lists every file it writes into prepare-cache/ here.
 WRITTEN_MANIFEST = ".superjev-written"

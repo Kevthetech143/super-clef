@@ -17,6 +17,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const VERSION = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
 const SKILL = join(ROOT, 'skills', 'super-jev');
 const argv = process.argv.slice(2);
+// SUPERCLEF_X is the public name for SUPERJEV_X (new name wins); internals keep reading SUPERJEV_*.
+for (const n of ['STATE_DIR', 'PRINCIPAL', 'CLEF_HOST', 'CLEF_DIR', 'JUDGE', 'BIN_DIR', 'INSTALL_DIR', 'REPO_URL', 'SAVE_AFTER', 'AUTO_CACHE']) {
+  if (process.env['SUPERCLEF_' + n]) process.env['SUPERJEV_' + n] = process.env['SUPERCLEF_' + n];
+}
 
 if (argv[0] === '--version' || argv[0] === '-v' || argv[0] === 'version') {
   console.log(`super-clef ${VERSION}`);
