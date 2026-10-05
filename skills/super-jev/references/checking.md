@@ -1,6 +1,6 @@
 ---
 name: super-jev
-description: "The ONE front door for every check we run — gate a draft against its evidence, verify a worker's report, sweep a pile bigger than one call, fetch the top few catalog entries for a request, and run the live bench. Thin wrappers over a claim-gate tool, a report-verify tool, and the super-jev harness, never a second copy of them. A door whose tool is missing names its own wishlist item and exits 6, so a missing tool tells you what is missing. `ask \"<one plain sentence>\"` routes a request to the right door with no model call. Triggers: /super-jev, check this before I send it, is this report true, run every question over this pile, which skill handles this, super jev"
+description: "The ONE front door for every check we run — gate a draft against its evidence, verify a worker's report, sweep a pile bigger than one call, fetch the top few catalog entries for a request, and run the live bench. Thin wrappers over a claim-gate tool, a report-verify tool, and the super-jev harness, never a second copy of them. A door whose tool is missing names its own wishlist item and exits 6, so a missing tool tells you what is missing. `ask \"<one plain sentence>\"` routes a request to the right door with no model call. Triggers: /super-jev, check this before I send it, is this report true, run every question over this pile, which skill handles this, super clef"
 type: procedure
 ---
 
@@ -8,7 +8,7 @@ type: procedure
 
 **In one sentence: you say what you want checked in plain words, and this picks the door, runs it, and hands you one verdict line.**
 
-*"The skill becomes the thing we steer in between us and the data: one simple ask and super jev handles it."*
+*"The skill becomes the thing we steer in between us and the data: one simple ask and super clef handles it."*
 
 Before this, the checks were scattered across two skills and a repo on four branches. A fresh session had to remember four places. This is the one place.
 

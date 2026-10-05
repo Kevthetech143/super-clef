@@ -6,7 +6,7 @@ Bulk inventory is Markdown by default (`CONNECTABLE_EXTENSIONS = ('.md',)`). `--
 
 Onboarding a new connector or refreshing one? Start at [`super-jev-connect/SKILL.md`](../../super-jev-connect/SKILL.md) — this page is the deep reference it links back to.
 
-A connector is the source-specific way an agent connects data to Super Jev. Use these names when explaining the product. Existing connector workflows share backends; these labels do not create a `connect` command, a new plugin, or automatic synchronization.
+A connector is the source-specific way an agent connects data to Super Clef. Use these names when explaining the product. Existing connector workflows share backends; these labels do not create a `connect` command, a new plugin, or automatic synchronization.
 
 | Human-facing connector | Available today | Agent execution/setup |
 |---|---|---|
@@ -50,7 +50,7 @@ Keep IDs stable, descriptions factual and specific, and paths resolvable. Use he
 
 No user-managed database is needed for this baseline. The index is an authoring aid, not an automatically parsed import contract. The memory `connect` action prepares explicit text-file paths and registers a pointer after agent review; it maintains the manifest and passages internally. Follow the same sample-query and freshness checks below. Do not claim a collection is connected merely because files or an index were created.
 
-Friendly setup hint: “Starting fresh? I can create a small, clearly described collection that works with Super Jev's existing preparation workflow. If you already have data, we can keep its structure and prepare a searchable view instead.” Give this hint when the source is absent or the user asks how to start, not on every successful lookup.
+Friendly setup hint: “Starting fresh? I can create a small, clearly described collection that works with Super Clef's existing preparation workflow. If you already have data, we can keep its structure and prepare a searchable view instead.” Give this hint when the source is absent or the user asks how to start, not on every successful lookup.
 
 ## Set up a new connection or repair an existing one
 
@@ -352,7 +352,7 @@ python3 dispatch.py memory --connect project-docs --structure folder-tree --file
 
 Review the proposed navigation metadata as well as source scope and permission, then run the returned `confirmCommand`. It preserves the reviewed structure and metadata hash. No directory crawling occurs; only supplied files enter the view. A folder-tree derives groups from their parent directories. Source descriptions should explain what each file actually contains; structure alone does not establish relevance.
 
-For agent-authored groupings such as an index of brain records, the JSON `connect` workflow can supply each source's `navigationPath`, an array of group labels, with `structure:"folder-tree"`. For example a source may have `"navigationPath":["Projects","Super Jev"]`. This is an explicit reviewed projection, not permission to follow links or read additional files. Use the preview's navigation metadata hash when confirming. Originals stay unchanged. Refresh an existing structure with the normal reviewed `replace:true` flow.
+For agent-authored groupings such as an index of brain records, the JSON `connect` workflow can supply each source's `navigationPath`, an array of group labels, with `structure:"folder-tree"`. For example a source may have `"navigationPath":["Projects","Super Clef"]`. This is an explicit reviewed projection, not permission to follow links or read additional files. Use the preview's navigation metadata hash when confirming. Originals stay unchanged. Refresh an existing structure with the normal reviewed `replace:true` flow.
 
 To locate candidate files, save this request in the caller repo's private working area and run `memory --input`:
 

@@ -1,4 +1,4 @@
-# Getting started with Super Jev
+# Getting started with Super Clef
 
 The full operating manual: one path, from empty machine to daily loop. Agents: the short version is
 [AGENTS.md](../AGENTS.md). Every
@@ -53,7 +53,7 @@ setting (except `SUPERJEV_TEST_*`), the judge key and url variables and
 ## 2. Set the key — do not skip this
 
 Every ask and check needs the key in the environment of the shell you
-run them from. **Super Jev never reads a `.env` file.**
+run them from. **Super Clef never reads a `.env` file.**
 
 The key lives in one file only you can read, `~/.typesafe-api-key`. If it does
 not exist yet, make it in your own terminal (never paste a key into chat): run
@@ -263,7 +263,7 @@ no off switch.
 python3 skills/super-jev/setup.py --uninstall
 ```
 
-Removes everything Super Jev wrote: the state folder (memory config, logs, pointers),
+Removes everything Super Clef wrote: the state folder (memory config, logs, pointers),
 `skills/super-jev/prepare-cache/`, `ledger/` and `autoheal-state/`, an older app's
 config and the launcher if you installed it, and any `~/.claude/skills` links into this
 checkout. A file of yours that sits in one of those folders stays, and the output lists it.

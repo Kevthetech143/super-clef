@@ -10,7 +10,7 @@ Domain packs, policy checks, bounded runs and replayable logs. Zero runtime depe
 
 Early V1; both demos tested with live Jev.
 
-https://github.com/Kevthetech143/super-jev
+https://github.com/Kevthetech143/super-clef
 
 ## Optional follow-up
 
