@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { readFile, open, unlink } from 'node:fs/promises';
-import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readFileSync, readSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { run } from './loop.ts';
 import { aliasEnv } from './env-alias.ts';
 import { getJudge, keyEnv, requireKey } from './judge.ts';
@@ -11,6 +12,8 @@ import type { Evaluation, Evaluator } from './types.ts';
 // Only deliberate, local diagnostics are safe to print. Parser and filesystem
 // exceptions can embed record contents or sensitive paths.
 class CliError extends Error {}
+
+const VERSION: string = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')).version;
 
 const usage = `super-jev organize INPUT.json --live [--out OUTPUT.json]
 super-jev organize examples/organizer.json --demo [--out OUTPUT.json]
@@ -84,7 +87,7 @@ try {
   const result = await run({ domain: organizer(input), initial: { rows: [], complete: false }, evaluator, maxSteps: 1,
     journal: { append: async e => { if (e.type === 'evaluation') { const data = e.data as Evaluation; model = data.model; usageTokens = data.usage; } } } });
   if (result.status !== 'success') throw new CliError(result.reason);
-  const json = JSON.stringify({ version: '0.2.0', mode: mode.slice(2), model, usage: usageTokens, ...organizerReport(input, result.state) }, null, 2) + '\n';
+  const json = JSON.stringify({ version: VERSION, mode: mode.slice(2), model, usage: usageTokens, ...organizerReport(input, result.state) }, null, 2) + '\n';
   if (reserved) { await reserved.writeFile(json); await reserved.close(); reserved = undefined; console.error(`Saved ${output}`); }
   else process.stdout.write(json);
 } catch (error) {

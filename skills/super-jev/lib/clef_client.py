@@ -27,11 +27,13 @@ SUPERJEV_CLEF_WARM (default 1; 0 = always one-shot), SUPERJEV_CLEF_IDLE (default
 import json
 import os
 import shlex
+import stat
 import subprocess
 import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import superclef_env  # noqa: E402,F401  (SUPERCLEF_* -> SUPERJEV_*, so this file works run directly)
 from judge_profile import PROFILE, judge_tokens as estimate_tokens  # noqa: E402
 from judges.errors import BadReply, TooBig, Unreachable, SecretBlocked  # noqa: E402
 
@@ -41,7 +43,7 @@ def host():
     """The ssh target of the judge machine. Required: there is no default."""
     h = os.environ.get("SUPERJEV_CLEF_HOST", "").strip()
     if not h:
-        raise Unreachable("SUPERJEV_CLEF_HOST is not set: set it to the ssh target of the machine that runs clef, e.g. user@clef-host")
+        raise Unreachable("SUPERCLEF_CLEF_HOST is not set: set it to the ssh target of the machine that runs clef, e.g. user@clef-host")
     return h
 
 
@@ -92,12 +94,30 @@ def _remote_command():
     return f"sh -c {shlex.quote(script)}"
 
 
-def _ssh_cmd(remote):
-    cm = os.path.expanduser("~/.ssh")
+SHORT_DIR = None  # tests point this at a temp folder
+SOCKET_LIMIT = 100  # sun_path is ~104 bytes; ssh adds a random suffix while it binds, so stay under with room
+
+
+def _control_dir(base=None, short=None):
+    """Where the ssh ControlPath socket lives. ~/.ssh/cm-superclef-<%C hash is 40 chars>; when that would not
+    fit a Unix socket path (a long HOME), use a short per-user dir under /tmp instead."""
+    cm = os.path.expanduser("~/.ssh") if base is None else base
+    if len(os.path.join(cm, "cm-superclef-")) + 40 + 17 > SOCKET_LIMIT:
+        cm = short or SHORT_DIR or f"/tmp/scl-{os.getuid()}"
     try:
         os.makedirs(cm, mode=0o700, exist_ok=True)
-    except OSError:
-        pass
+        st = os.lstat(cm)  # lstat: a symlink planted at this name is not a directory here
+    except OSError as e:
+        raise Unreachable(f"cannot use the ssh socket folder {cm} ({e.__class__.__name__}); "
+                          f"remove it or fix its owner, then retry") from None
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or (st.st_mode & 0o077):
+        raise Unreachable(f"the ssh socket folder {cm} is not a private folder of yours "
+                          f"(a link, someone else's, or open to others); remove it (rm -r {cm}) and retry")
+    return cm
+
+
+def _ssh_cmd(remote):
+    cm = _control_dir()
     return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15",
             "-o", "ControlMaster=auto", "-o", f"ControlPath={cm}/cm-superclef-%C", "-o", "ControlPersist=600",
             host(), remote]

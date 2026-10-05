@@ -35,6 +35,9 @@ and maps the verdict onto the hook's own exit convention (0 allow/advisory,
 to a call ledger under this skill's own `ledger/` folder; see `ledger` and
 `status`.
 """
+import os.path as _op, sys as _sys  # noqa: E401
+_sys.path.insert(0, _op.dirname(_op.abspath(__file__)))
+import superclef_env  # noqa: E402,F401  (SUPERCLEF_* -> SUPERJEV_*)
 import argparse
 import contextlib
 import fcntl

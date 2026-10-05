@@ -8,9 +8,9 @@
 # helpers need python3, which the app checks when it starts, not here.
 set -euo pipefail
 
-REPO_URL="${SUPERJEV_REPO_URL:-https://github.com/Kevthetech143/super-clef.git}"
-INSTALL_DIR="${SUPERJEV_INSTALL_DIR:-$HOME/.local/share/super-clef}"
-BIN_DIR="${SUPERJEV_BIN_DIR:-$HOME/.local/bin}"
+REPO_URL="${SUPERCLEF_REPO_URL:-${SUPERJEV_REPO_URL:-https://github.com/Kevthetech143/super-clef.git}}"
+INSTALL_DIR="${SUPERCLEF_INSTALL_DIR:-${SUPERJEV_INSTALL_DIR:-$HOME/.local/share/super-clef}}"
+BIN_DIR="${SUPERCLEF_BIN_DIR:-${SUPERJEV_BIN_DIR:-$HOME/.local/bin}}"
 
 info()  { printf '\033[36m==>\033[0m %s\n' "$1"; }
 fail()  { printf '\033[31merror:\033[0m %s\n' "$1" >&2; exit 1; }

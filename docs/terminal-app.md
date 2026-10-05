@@ -1,4 +1,4 @@
-# The terminal app (`superjev`)
+# The terminal app (`superclef`)
 
 A window in your terminal over the same helpers agents call. What you see
 is what the helpers report: each helper prints one JSON object and an exit
@@ -7,9 +7,9 @@ code, and the app only draws it. It needs only Node 24 and Python 3.10.
 ## Start
 
 ```bash
-npm run jev            # the window
-./install.sh           # optional: puts a `superjev` command on your PATH
-superjev "How long does the canary hold?"   # one question, then exit
+npm run clef           # the window
+bash install.sh        # optional: puts a `superclef` command on your PATH
+superclef "How long does the canary hold?"   # one question, then exit
 ```
 
 `install.sh` clones the repo to `~/.local/share/super-clef`; folders are kept
@@ -50,7 +50,7 @@ Needs a terminal with bracketed paste (the usual ones).
 
 ## One question from a shell
 
-`superjev <words>` handles the words as if typed in the window. The answer
+`superclef <words>` handles the words as if typed in the window. The answer
 goes to stdout (no colour when piped) and the progress row to stderr. The
 exit code is the helper's own: found 0, not found 1, not supported 2, error
 3, needs setup 4 (`/check` keeps the claim check's own codes). A stop

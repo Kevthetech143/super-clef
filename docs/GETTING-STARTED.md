@@ -2,7 +2,7 @@
 
 The full operating manual: one path, from empty machine to daily loop. Agents: the short version is
 [AGENTS.md](../AGENTS.md). Every
-step has the exact command and what success looks like. Run from the repo root.
+step has the exact command and what success looks like. Run from the repo root. The skill folders are still named `skills/super-jev/...` (folder name kept for now); type those paths as shown.
 
 ## 1. Prerequisites
 
@@ -46,8 +46,8 @@ npm test                              # node suite — success: every test passe
 python3 -m pytest skills/super-jev/tests -q   # python suite — success: "passed" with 0 failed (4 to 6 minutes; a few skips are normal)
 ```
 
-Both suites start from a clean environment: they clear every `SUPERJEV_*`
-setting (except `SUPERJEV_TEST_*`), the judge key and url variables and
+Both suites start from a clean environment: they clear the product's own
+settings (see "Environment names" in the README), the judge key and url variables and
 `SWEEP_BATCH` first, so what your shell exports cannot change the result.
 
 ## 2. Set the key — do not skip this
@@ -89,7 +89,7 @@ Claude Code it uses `~/.claude/skills` and needs nothing. Any other agent copies
 python3 skills/super-jev/setup.py
 ```
 
-Creates the state folder (`$SUPERJEV_STATE_DIR` or `~/.local/state/super-clef`,
+Creates the state folder (`$SUPERCLEF_STATE_DIR` or `~/.local/state/super-clef`,
 owner-only) and the memory config inside it (`_memory/config.json`), then
 checks Node, Python and the key. Success: it ends with `READY.` and the next
 command. Safe to rerun: it never overwrites an existing config.
@@ -118,7 +118,7 @@ Add `--findability` to also search each file's own sample question and report
 `findability: N/N files rank first on their own question` (one paid search per file).
 
 Each file gets a one-sentence description, and that description is checked
-against the file before it is connected (by Jev for a model-written one, locally
+against the file before it is connected (by the judge for a model-written one, locally
 for `--writer builtin`). Pick the description writer:
 
 - `--writer builtin` — no model and no TypeSafe call (unless you add `--findability`):
@@ -147,7 +147,7 @@ for `--writer builtin`). Pick the description writer:
   file (a secret-like value, or a note over 250,000 bytes) has no override: read the held list the command
   printed, then remove or move the value, or split the note, and re-run. A password or key keyword holds a
   file only when a literal value follows it (a digit or symbol in it, not a placeholder or a call).
-- **Where state lives:** per-principal logs and the memory config under `$SUPERJEV_STATE_DIR` or
+- **Where state lives:** per-principal logs and the memory config under `$SUPERCLEF_STATE_DIR` or
   `~/.local/state/super-clef/<principal>/`. Preparation records land in the checkout:
   `skills/super-jev/prepare-cache/` (descriptions, reports and the recipe a refresh replays),
   `skills/super-jev/ledger/` and `skills/super-jev/autoheal-state/` (see step 9).
@@ -196,7 +196,7 @@ python3 skills/super-jev/ask.py --principal ME --add "the question" "the answer"
 
 Success for `--approve`: asking the same question again is a cache hit.
 
-A saved answer is the answer to one question, saved through one door: whether it saves itself on a repeat question, or you use `--approve` or `--add`, the same secret scan runs, and `--approve` and `--add` also run the claim check (CLEAN, 0.80 or higher, against the cited file); a repeat question saves the file itself, not an answer, and its N wins stand in for the claim check, and `--approve "question"` with no answer does the same for the list you were just shown (you vouch for it; `--rank N` puts that file first; no claim check, secret scan and unchanged-file check still run); a fact with no file gets the secret scan only and is shown as "no source file", and a `--source` that does not exist is refused. It lasts until its source file changes (there is no clock expiry), or until `--miss` removes it; `--miss` exits 1 when there was nothing saved to remove. The same question means the same words after lowercasing, collapsing spaces and dropping trailing punctuation; nothing fuzzier matches. A question saves itself when the same file wins it N times in a row (`SUPERJEV_SAVE_AFTER`, default 2); `--approve` meets that threshold at once. A hit says `saved answer, from FILE, saved DATE` (an auto-saved one prints the file path, not an answer) (or `no source file`); if the file changed, it says so and searches live instead.
+A saved answer is the answer to one question, saved through one door: whether it saves itself on a repeat question, or you use `--approve` or `--add`, the same secret scan runs, and `--approve` and `--add` also run the claim check (CLEAN, 0.80 or higher, against the cited file); a repeat question saves the file itself, not an answer, and its N wins stand in for the claim check, and `--approve "question"` with no answer does the same for the list you were just shown (you vouch for it; `--rank N` puts that file first; no claim check, secret scan and unchanged-file check still run); a fact with no file gets the secret scan only and is shown as "no source file", and a `--source` that does not exist is refused. It lasts until its source file changes (there is no clock expiry), or until `--miss` removes it; `--miss` exits 1 when there was nothing saved to remove. The same question means the same words after lowercasing, collapsing spaces and dropping trailing punctuation; nothing fuzzier matches. A question saves itself when the same file wins it N times in a row (`SUPERCLEF_SAVE_AFTER`, default 2); `--approve` meets that threshold at once. A hit says `saved answer, from FILE, saved DATE` (an auto-saved one prints the file path, not an answer) (or `no source file`); if the file changed, it says so and searches live instead.
 `--add` quotes are taken verbatim from reviewed text; the same wording twice
 refuses unless you pass `--replace-entry`.
 
@@ -213,7 +213,7 @@ python3 skills/super-jev/dispatch.py check \
 Or pass `--draft /tmp/draft.txt` instead of `--claim` to check every sentence
 of a draft.
 
-Jev reads the evidence files and answers, per claim, `SUPPORTED`,
+The judge reads the evidence files and answers, per claim, `SUPPORTED`,
 `NOT_SUPPORTED` or `CONTRADICTED` with a confidence.
 
 - Exit 0, `VERDICT: CLEAN` — every claim is supported at 0.80 or above. Send it.
@@ -226,7 +226,7 @@ Don't know which file holds the fact, or want the proof file and line? Use
 `python3 skills/super-jev/ask.py --principal me --claim "claim one"` instead: it exits
 0 only for TRUE (FALSE is 5, every other result is non-zero), so only exit 0 is a pass there too.
 
-Add `--json` for machine-readable output. Set `SUPERJEV_GATE_CMD` to use your
+Add `--json` for machine-readable output. Set `SUPERCLEF_GATE_CMD` to use your
 own claim-gate tool instead of the built-in client
 (`skills/super-jev/lib/jev_client.py`).
 
@@ -253,7 +253,7 @@ caps how many refreshes it starts per hour. If a background refresh fails, the
 ask says `auto-heal: last refresh FAILED: <reason>`; run the refresh command
 printed on that line to see the error and refresh by hand. Auto-heal writes its locks,
 cooldowns and logs, which name your sets and files, to
-`skills/super-jev/autoheal-state/`. `SUPERJEV_NEW_FILE_SCAN=0` turns off the
+`skills/super-jev/autoheal-state/`. `SUPERCLEF_NEW_FILE_SCAN=0` turns off the
 scan that looks for new notes in connected folders; refreshing a changed set has
 no off switch.
 
@@ -265,7 +265,7 @@ python3 skills/super-jev/setup.py --uninstall
 
 Removes everything Super Clef wrote: the state folder (memory config, logs, pointers),
 `skills/super-jev/prepare-cache/`, `ledger/` and `autoheal-state/`, an older app's
-config and the launcher if you installed it, and any `~/.claude/skills` links into this
+config and the `~/.local/bin/superclef` launcher if the installer made it for this checkout (a launcher without the installer marker stays), and any `~/.claude/skills` links into this
 checkout. A file of yours that sits in one of those folders stays, and the output lists it.
 It keeps `~/.typesafe-api-key`, your key file (hooks and agents read it too); delete it
 yourself if you want the key gone. Your own files are never touched.

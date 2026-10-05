@@ -59,6 +59,7 @@ OWNED = {
 }
 # install.sh writes the chat launcher with this marker line and an exec of its checkout
 LAUNCHER_MARKER = "# super-jev-installer"
+CLEF_LAUNCHER_MARKER = "# super-clef-installer"
 
 MIN_NODE = 24
 MIN_PYTHON = (3, 10)
@@ -152,7 +153,7 @@ def setup() -> int:
         # files; planting a config there would later let --uninstall claim it. A folder holding
         # only what `superclef connect` wrote (its registry or prepare-cache) is ours.
         print(f"REFUSED: {root} already exists and is not empty, and setup did not make it. "
-              "Point SUPERJEV_STATE_DIR at a new or empty folder, then run setup again.")
+              "Point SUPERCLEF_STATE_DIR at a new or empty folder, then run setup again.")
         return 1
     cfg.parent.mkdir(parents=True, exist_ok=True)
     for d in (state_root(), cfg.parent):
@@ -190,7 +191,7 @@ def setup() -> int:
     if judges.profile().kind == "clef":
         host = os.environ.get("SUPERJEV_CLEF_HOST", "").strip()
         how = ("Set the judge host to the ssh target of the machine that runs clef, with key login, and run setup again:"
-               "\n        export SUPERJEV_CLEF_HOST=user@clef-host   (SUPERCLEF_CLEF_HOST works too)")
+               "\n        export SUPERCLEF_CLEF_HOST=user@clef-host")
         if not host:
             problems.append("The judge host is not set. " + how)
         elif _judge_reachable(host):
@@ -292,11 +293,17 @@ def _remove_chat_cli(removed: list, kept: list) -> None:
         else:
             config_dir.rmdir()
             removed.append(str(config_dir))
-    launcher = Path(os.environ.get("SUPERJEV_BIN_DIR") or Path.home() / ".local/bin") / "superjev"
-    if launcher.is_file() and not launcher.is_symlink() and launcher.stat().st_size < 4096:
+    bin_dir = Path(os.environ.get("SUPERJEV_BIN_DIR") or Path.home() / ".local/bin")
+    # The old `superjev` launcher (old marker, jev-chat-cli.ts) and the current `superclef` one
+    # (scripts/install-superclef.sh). Each goes only with its own marker line and an exec of this checkout.
+    for name, marker, entry in (("superjev", LAUNCHER_MARKER, r"/src/jev-chat-cli\.ts"),
+                                ("superclef", CLEF_LAUNCHER_MARKER, r"/bin/superclef\.js")):
+        launcher = bin_dir / name
+        if not (launcher.is_file() and not launcher.is_symlink() and launcher.stat().st_size < 4096):
+            continue
         lines = launcher.read_text(errors="replace").splitlines()
-        execs = [m.group(1) for m in (re.fullmatch(r'exec node "(.+)/src/jev-chat-cli\.ts" "\$@"', ln) for ln in lines) if m]
-        if LAUNCHER_MARKER in lines and any(Path(e).resolve() == REPO for e in execs):
+        execs = [m.group(1) for m in (re.fullmatch(r'exec node "(.+)' + entry + r'" "\$@"', ln) for ln in lines) if m]
+        if any(ln == marker or ln.startswith(marker + ":") for ln in lines) and any(Path(e).resolve() == REPO for e in execs):
             launcher.unlink()
             removed.append(str(launcher))
 
@@ -334,8 +341,8 @@ def uninstall() -> int:
         # Only a folder setup made (it holds setup's _memory/config.json) is ours to
         # delete; SUPERJEV_STATE_DIR may point at a folder of the user's own files.
         print(f"REFUSED: {root} has no {config_path().relative_to(root)} (the marker setup "
-              "writes), so it may not be a Super Jev state folder. Nothing was deleted; "
-              "check SUPERJEV_STATE_DIR, or delete that folder yourself if it is Super Jev's.")
+              "writes), so it may not be a Super Clef state folder. Nothing was deleted; "
+              "check SUPERCLEF_STATE_DIR, or delete that folder yourself if it is Super Clef's.")
         return 1
     kept, repo_kept = [], []
     for d in IN_REPO_LEFTOVERS:
@@ -396,10 +403,10 @@ def uninstall() -> int:
     if removed:
         print("removed:\n  " + "\n  ".join(removed))
     if repo_kept:
-        print("left in place (not made by Super Jev):\n  " + "\n  ".join(repo_kept))
+        print("left in place (not made by Super Clef):\n  " + "\n  ".join(repo_kept))
     if kept:
-        print(f"left in place (not made by Super Jev), so {root} was kept:\n  " + "\n  ".join(kept))
-    print("Super Jev is uninstalled. Your original files were not touched. "
+        print(f"left in place (not made by Super Clef), so {root} was kept:\n  " + "\n  ".join(kept))
+    print("Super Clef is uninstalled. Your original files were not touched. "
           "Delete this checkout folder to remove the code too.")
     return 0
 
