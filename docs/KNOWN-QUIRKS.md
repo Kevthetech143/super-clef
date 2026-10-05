@@ -17,7 +17,7 @@ Each quirk: what you see, why it happens (if known), and the workaround.
 ## 3. A true claim can still come back READ
 
 - **Symptom:** a claim you know is true gets `VERDICT: READ (blocked)`.
-- **Cause:** the judge judges the claim against only the evidence files you passed. If the file states it indirectly, or the fact is in a file you did not pass, the claim lands as `NOT_SUPPORTED` or under the 0.80 line.
+- **Cause:** the judge checks the claim against only the evidence files you passed. If the file states it indirectly, or the fact is in a file you did not pass, the claim lands as `NOT_SUPPORTED` or under the 0.80 line.
 - **Workaround:** pass the file that states the fact, and word the claim the way the file does.
 
 ## 4. A second checkout sees 0 pointers

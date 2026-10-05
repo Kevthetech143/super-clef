@@ -265,7 +265,7 @@ python3 skills/super-jev/setup.py --uninstall
 
 Removes everything Super Clef wrote: the state folder (memory config, logs, pointers),
 `skills/super-jev/prepare-cache/`, `ledger/` and `autoheal-state/`, an older app's
-config and the launcher if you installed it, and any `~/.claude/skills` links into this
+config and the `~/.local/bin/superclef` launcher if the installer made it for this checkout (a launcher without the installer marker stays), and any `~/.claude/skills` links into this
 checkout. A file of yours that sits in one of those folders stays, and the output lists it.
 It keeps `~/.typesafe-api-key`, your key file (hooks and agents read it too); delete it
 yourself if you want the key gone. Your own files are never touched.

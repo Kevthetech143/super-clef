@@ -21,9 +21,12 @@ def test_long_home_gets_a_short_control_path(tmp_path, monkeypatch):
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("SUPERJEV_CLEF_HOST", "user@made-up-host")
+    import tempfile
+    short = Path(tempfile.mkdtemp(prefix="s", dir="/tmp")) / "scl"
+    monkeypatch.setattr(clef_client, "SHORT_DIR", str(short))
     cp = _control_path(clef_client._ssh_cmd("true"))
     assert len(cp) < SOCK_MAX
-    assert cp.startswith(f"/tmp/scl-{os.getuid()}/")
+    assert cp.startswith(str(short) + "/")
     assert (os.stat(os.path.dirname(cp)).st_mode & 0o777) == 0o700
 
 
@@ -41,3 +44,40 @@ def test_run_directly_reads_superclef_host():
     env = {"PATH": "/usr/bin:/bin", "SUPERCLEF_CLEF_HOST": "me@made-up-host"}
     out = subprocess.run([sys.executable, "-c", code], cwd=SKILL / "lib", env=env, capture_output=True, text=True)
     assert out.stdout.strip() == "me@made-up-host", out.stderr
+
+
+import pytest  # noqa: E402
+
+LONG = "/" + "long-home-name-" * 8
+
+
+def test_planted_symlink_is_refused(tmp_path):
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    link = tmp_path / "scl-link"
+    link.symlink_to(target)
+    with pytest.raises(clef_client.Unreachable):
+        clef_client._control_dir(LONG, short=str(link))
+
+
+def test_open_mode_is_refused(tmp_path):
+    d = tmp_path / "scl-open"
+    d.mkdir()
+    d.chmod(0o755)
+    with pytest.raises(clef_client.Unreachable):
+        clef_client._control_dir(LONG, short=str(d))
+
+
+def test_foreign_owner_is_refused(tmp_path, monkeypatch):
+    d = tmp_path / "scl-foreign"
+    d.mkdir(mode=0o700)
+    monkeypatch.setattr(clef_client.os, "getuid", lambda: os.stat(d).st_uid + 1)
+    with pytest.raises(clef_client.Unreachable):
+        clef_client._control_dir(LONG, short=str(d))
+
+
+def test_good_dir_passes_and_is_created(tmp_path):
+    d = tmp_path / "scl-good"
+    assert clef_client._control_dir(LONG, short=str(d)) == str(d)
+    assert (os.stat(d).st_mode & 0o777) == 0o700
+    assert clef_client._control_dir(LONG, short=str(d)) == str(d)

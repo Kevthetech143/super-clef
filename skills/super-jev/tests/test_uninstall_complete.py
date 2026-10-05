@@ -236,3 +236,27 @@ def test_uninstall_keeps_a_foreign_file_in_the_state_dir_cache(env, capsys):
     mine = touch(state / "prepare-cache" / "mine.txt")
     assert setup.main(["--uninstall"]) == 0
     assert mine.is_file() and not (state / "prepare-cache" / "notes.json").exists()
+
+
+def clef_launcher_text(checkout: Path) -> str:
+    return f'#!/usr/bin/env bash\n# super-clef-installer: runs the checkout at {checkout}\nexec node "{checkout}/bin/superclef.js" "$@"\n'
+
+
+def test_the_superclef_launcher_is_removed_only_when_ours(env):
+    made_state(env)
+    touch(env / "bin" / "superclef", clef_launcher_text(REPO))
+    assert setup.main(["--uninstall"]) == 0
+    assert not (env / "bin" / "superclef").exists()
+
+
+@pytest.mark.parametrize("kind", ["another-checkout", "no-marker", "marker-but-not-an-exec"])
+def test_a_superclef_launcher_that_is_not_ours_stays(env, kind):
+    text = {
+        "another-checkout": clef_launcher_text(Path("/somewhere/else/super-clef")),
+        "no-marker": '#!/usr/bin/env bash\nexec node "%s/bin/superclef.js" "$@"\n' % REPO,
+        "marker-but-not-an-exec": "#!/usr/bin/env bash\n# super-clef-installer: runs the checkout at x\necho mine\n",
+    }[kind]
+    made_state(env)
+    touch(env / "bin" / "superclef", text)
+    assert setup.main(["--uninstall"]) == 0
+    assert (env / "bin" / "superclef").read_text() == text

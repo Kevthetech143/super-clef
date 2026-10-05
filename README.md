@@ -155,7 +155,7 @@ Removes everything Super Clef wrote: the state directory (`$SUPERCLEF_STATE_DIR`
 `~/.local/state/super-clef`: the memory config, connected pointers, cached answers and
 logs), `skills/super-jev/prepare-cache/`, `ledger/` and `autoheal-state/` in this
 checkout, an older app's config (`~/.config/superjev/config.json`, which held the key),
-`~/.local/bin/superjev` (the old launcher name) if `install.sh` made it for this checkout, and any
+the `superclef` launcher (and the old `superjev` one) in `~/.local/bin` if it carries the installer marker and points at this checkout, and any
 `~/.claude/skills` links that point into this checkout. It deletes only the names Super Clef
 writes in each folder; a file of yours in the same folder stays, and the output lists it.
 It keeps `~/.typesafe-api-key`, your key file (hooks and agents read it too): delete it

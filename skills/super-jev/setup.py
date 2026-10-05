@@ -59,6 +59,7 @@ OWNED = {
 }
 # install.sh writes the chat launcher with this marker line and an exec of its checkout
 LAUNCHER_MARKER = "# super-jev-installer"
+CLEF_LAUNCHER_MARKER = "# super-clef-installer"
 
 MIN_NODE = 24
 MIN_PYTHON = (3, 10)
@@ -292,11 +293,17 @@ def _remove_chat_cli(removed: list, kept: list) -> None:
         else:
             config_dir.rmdir()
             removed.append(str(config_dir))
-    launcher = Path(os.environ.get("SUPERJEV_BIN_DIR") or Path.home() / ".local/bin") / "superjev"
-    if launcher.is_file() and not launcher.is_symlink() and launcher.stat().st_size < 4096:
+    bin_dir = Path(os.environ.get("SUPERJEV_BIN_DIR") or Path.home() / ".local/bin")
+    # The old `superjev` launcher (old marker, jev-chat-cli.ts) and the current `superclef` one
+    # (scripts/install-superclef.sh). Each goes only with its own marker line and an exec of this checkout.
+    for name, marker, entry in (("superjev", LAUNCHER_MARKER, r"/src/jev-chat-cli\.ts"),
+                                ("superclef", CLEF_LAUNCHER_MARKER, r"/bin/superclef\.js")):
+        launcher = bin_dir / name
+        if not (launcher.is_file() and not launcher.is_symlink() and launcher.stat().st_size < 4096):
+            continue
         lines = launcher.read_text(errors="replace").splitlines()
-        execs = [m.group(1) for m in (re.fullmatch(r'exec node "(.+)/src/jev-chat-cli\.ts" "\$@"', ln) for ln in lines) if m]
-        if LAUNCHER_MARKER in lines and any(Path(e).resolve() == REPO for e in execs):
+        execs = [m.group(1) for m in (re.fullmatch(r'exec node "(.+)' + entry + r'" "\$@"', ln) for ln in lines) if m]
+        if any(ln == marker or ln.startswith(marker + ":") for ln in lines) and any(Path(e).resolve() == REPO for e in execs):
             launcher.unlink()
             removed.append(str(launcher))
 
