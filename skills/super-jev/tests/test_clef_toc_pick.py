@@ -40,15 +40,23 @@ def _ask():
             "term_hits": lambda ts, text: sum(w in text.lower() for w in ts), "fold": str.lower}
 
 
-def _run(monkeypatch, profile, hits=()):
+def _judge(likes, none=0.02):
+    """A stub clef: a page containing `likes` gets 0.9, every other page 0.02, "none" gets `none`."""
+    def score(state, crit):
+        return {k: (none if k == "none" else 0.9 if likes and likes in str(state.get(k, "")).lower() else 0.02) for k in crit}
+    return score
+
+
+def _run(monkeypatch, profile, hits=(), score=None):
     corpus = {p: ("ptr", {"sha256": p, "description": ""}) for p in TEXTS}
     sent = []
+    score = score or _judge("crossing")
 
     def clef(state, qs, timeout=90):
         assert judge_profile.judge_tokens(state) + max(judge_profile.judge_tokens(q) for q in qs.values()) <= profile.call_tokens
         sent.append(state)
         (qid, q), = qs.items()  # one listwise question per call
-        probs = {k: (0.9 if "crossing" in str(state.get(k, "")).lower() else 0.02) for k in q["criteria"]}
+        probs = score(state, q["criteria"])
         return {"answers": {qid: {"type": "choice", "choice": max(probs, key=probs.get), "probabilities": probs}}}
 
     monkeypatch.setattr(judges, "profile", lambda: profile)
@@ -69,6 +77,43 @@ def test_the_clef_toc_pick_calls_the_judge_and_surfaces_a_file_word_search_misse
     assert GOLD in files[:toc_search.KEEP_FILES + 1]
     assert files[0] == "/n/ferry-paint.md"  # the word search's best hit keeps its slot
     assert trace["pick"]["top"][0][0] == GOLD
+
+
+HITS3 = [(3.0, "/n/ferry-paint.md", "ptr"), (2.0, "/n/dock-paint.md", "ptr"), (1.0, "/n/leave-forms.md", "ptr")]
+
+
+def test_a_none_answer_changes_no_slots(monkeypatch):
+    free, _t, _s = _run(monkeypatch, dataclasses.replace(CLEF, toc_pick_pool=0), HITS3)
+    files, trace, sent = _run(monkeypatch, CLEF, HITS3, _judge("crossing", none=0.95))
+    assert sent and files == free
+    assert trace["pick"]["picked"] is None and trace["pick"]["none"] == [0.95]
+
+
+def test_the_third_word_hit_stays_in_the_top_five(monkeypatch):
+    files, trace, _s = _run(monkeypatch, CLEF, HITS3)
+    assert files[:3] == [p for _s, p, _ptr in HITS3]
+    assert files[3] == GOLD and trace["pick"]["picked"] == GOLD
+
+
+def test_a_wrong_pick_moves_a_free_file_down_one_slot_at_most(monkeypatch):
+    free, _t, _s = _run(monkeypatch, dataclasses.replace(CLEF, toc_pick_pool=0), HITS3)
+    files, trace, _s = _run(monkeypatch, CLEF, HITS3, _judge("garden"))
+    assert trace["pick"]["picked"] == "/n/garden.md"
+    for k, p in enumerate(free):
+        assert p in files and files.index(p) <= k + 1
+
+
+def test_a_negative_knob_is_refused_and_a_zero_page_size_turns_the_pick_off(tmp_path, monkeypatch):
+    import json
+    import pytest
+    table = json.loads(judge_profile.PROFILES_PATH.read_text())
+    table["profiles"]["clef"]["toc_pick_pool"] = -1
+    bad = tmp_path / "profiles.json"
+    bad.write_text(json.dumps(table))
+    with pytest.raises(SystemExit):
+        judge_profile.load("clef", path=bad)
+    files, trace, sent = _run(monkeypatch, dataclasses.replace(CLEF, toc_page_chars=0))
+    assert not sent and trace["pick"]["calls"] == 0
 
 
 def test_without_a_pick_pool_the_clef_shortlist_stays_free(monkeypatch):

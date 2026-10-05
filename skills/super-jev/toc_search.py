@@ -15,8 +15,9 @@ Search, for one question:
   1. shortlist  free: rank every searchable file by how many question words its path, label, purpose
                 and part names share; keep the best POOL_CAP, plus the word search's own hits
   2. pick       Jev reads each shortlisted file's one-page TOC and says LIKELY or UNLIKELY; keep the
-                best KEEP_FILES, plus the word search's hits (safety net). A small judge (clef) instead picks from
-                the best toc_pick_pool short pages of its profile, in calls that fit its window (small_pick)
+                best KEEP_FILES, plus the word search's hits (safety net). A small judge (clef) instead picks one
+                file or none from the best toc_pick_pool short pages of its profile, in calls that fit its window
+                (small_pick); its pick takes one slot after the word search's hits, ahead of the free shortlist
   3. parts      Jev says LIKELY or UNLIKELY for each named part of those files; the best KEEP_PARTS,
                 the part sharing most question words, and the window around the best-matching line
                 are what the content check reads, so the answer carries its location
@@ -389,10 +390,10 @@ def short_page(path: str, entry: dict, toc: dict, chars: int) -> str:
     return (text + (f" | parts: {names}" if names else ""))[:chars]
 
 
-def small_pick(question: str, pages: dict, budget: int) -> dict:
-    """{path: P(picked)}: the small judge picks one file or none from a few TOC pages per call, the pages split
-    into as few calls as fit `budget` (state plus the question, in judge tokens). One call at a time: the
-    clef machine runs one call at a time anyway. Raises on a reply with no probabilities."""
+def small_pick(question: str, pages: dict, budget: int):
+    """({path: P(picked)}, [P(none) per call]): the small judge picks one file or none from a few TOC pages per call,
+    the pages split into as few calls as fit `budget` (state plus the question, in judge tokens). One call at a
+    time: the clef machine runs one call at a time anyway. Raises on a reply with no probabilities."""
     def call(batch):
         state = {f"file_{k + 1}": pages[p] for k, p in enumerate(batch)}
         crit = {f"file_{k + 1}": Path(p).name for k, p in enumerate(batch)}
@@ -411,15 +412,16 @@ def small_pick(question: str, pages: dict, budget: int) -> dict:
         cur.append(p)
     if cur:
         batches.append(cur)
-    out = {}
+    out, nones = {}, []
     for batch in batches:
         state, qs = call(batch)
         with _lock:
             _calls["n"] += 1
         probs = judges.ask(state, qs, timeout=90)["answers"]["pick"]["probabilities"]
+        nones.append(float(probs["none"]))
         for k, p in enumerate(batch):
             out[p] = float(probs[f"file_{k + 1}"])
-    return out
+    return out, nones
 
 
 # --- the search -------------------------------------------------------------------------------
@@ -462,29 +464,26 @@ def run(question: str, corpus: dict, hits: list, ask: dict, cache_path=None, jud
                  lambda x: ask["term_hits"](terms, f"{x['name']} {x.get('doc') or ''}"))
         if not ask["has_secret"](t):
             pages[p] = t
-    pick_error = None
-    if judge_free:  # a small judge (clef): the word search's best hits keep their slots; the judge picks the rest
-        s2, rank2 = {}, []
+    pick_error, picked = None, None
+    if judge_free:  # a small judge (clef): the word search's best hits keep their slots; the judge's pick adds one
+        s2, rank2, nones = {}, [], []
         # the word search's best hits and the idf-ranked TOC shortlist share the slots, so neither list's blind spot hides a file
         top_hits = [p for p in hit_paths if p in pages][:3]
         rest = [p for p in ranked if p in pages and p not in top_hits]
         prof = judges.profile()
-        if prof.toc_pick_pool > 0 and rest:
+        if prof.toc_pick_pool > 0 and prof.toc_page_chars > 0 and rest:
             try:
-                s2 = small_pick(question, {p: short_page(p, entries[p], tocs[p], prof.toc_page_chars)
-                                           for p in rest[:prof.toc_pick_pool]}, prof.call_tokens)
-                rank2 = sorted(s2, key=lambda p: (-s2[p], rest.index(p)))
-                rest = rank2 + [p for p in rest if p not in s2]
+                s2, nones = small_pick(question, {p: short_page(p, entries[p], tocs[p], prof.toc_page_chars)
+                                                  for p in rest[:prof.toc_pick_pool]}, prof.call_tokens)
             except (judges.JudgeError, ValueError, KeyError, TypeError, AttributeError) as e:
                 # the pick did not finish: the free shortlist stands, and the trace says why
-                s2, rank2, pick_error = {}, [], f"{type(e).__name__}: {str(e)[:160]}"
-        if rank2:  # the judge read the pages: its picks take one more slot and alternate with the word search's hits
-            top_hits = top_hits[:2]
-            picks = [p for p in rest if p not in top_hits][:KEEP_FILES + 1 - len(top_hits)]
-            keep = [p for pair in zip(top_hits + [None] * len(picks), picks) for p in pair if p]
-            keep += [p for p in top_hits if p not in keep]
-        else:
-            keep = top_hits + rest[:KEEP_FILES + 1 - len(top_hits)]
+                s2, nones, pick_error = {}, [], f"{type(e).__name__}: {str(e)[:160]}"
+            rank2 = sorted(s2, key=lambda p: (-s2[p], rest.index(p)))
+            # one file or none: the best page counts only when it beats "none" (in every call, when there were several)
+            if rank2 and s2[rank2[0]] > max(nones, default=0.0):
+                picked = rank2[0]
+        fill = [p for p in rest if p != picked][:KEEP_FILES + 1 - len(top_hits)]
+        keep = top_hits + ([picked] if picked else []) + fill
     else:
         s2 = score_items(question, pages, L2, "choose the files that hold the answer") if pages else {}
         rank2 = sorted(s2, key=lambda p: (-s2[p], p))
@@ -493,7 +492,7 @@ def run(question: str, corpus: dict, hits: list, ask: dict, cache_path=None, jud
     trace["pick"] = {"pool": len(pool), "top": [(p, round(s2[p], 3)) for p in rank2[:10]],
                      "net_added": [p for p in hit_paths if p not in keep], "calls": calls() - c0}
     if judge_free:
-        trace["pick"]["judged"] = len(s2)
+        trace["pick"].update(judged=len(s2), picked=picked, none=[round(x, 3) for x in nones])
     if pick_error:
         trace["pick"]["error"] = pick_error
     # 3. parts

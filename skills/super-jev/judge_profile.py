@@ -167,6 +167,8 @@ def load(name=None, path=None):
                 opt[f] = int(p[f])
             except (ValueError, TypeError) as e:
                 raise SystemExit(f"super-jev: cannot read the judge limits table {Path(path).name}: {e!r}")
+            if opt[f] < 0:
+                raise SystemExit(f"super-jev: cannot read the judge limits table {Path(path).name}: {f} must be 0 or more")
     if "confidence_field" in p:
         opt["confidence_field"] = str(p["confidence_field"])
     opt["judge_name"] = opt.get("judge_name") or key
