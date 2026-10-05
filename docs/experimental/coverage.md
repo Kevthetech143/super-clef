@@ -1,6 +1,6 @@
 # Claim-type → evidence-type coverage
 
-Every door in super-jev, plus the fleet's local area doors that reuse the
+Every door in Super Clef, plus the fleet's local area doors that reuse the
 same shape, answers a narrow set of claim types with a **free check** (a
 local command or file read, zero model calls) before anything reaches a
 judge. This page is the map: for each door, which claim types it can check,

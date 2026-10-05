@@ -1,9 +1,9 @@
-# Super Jev for agents: start here
+# Super Clef for agents: start here
 
 You are an agent. Your human wants you to find facts in their own files and to
 check what you say before you say it. Follow the steps below in order, from the
 repo root. You need no private files and no help. Budget about 10 minutes. An
-`ask` or `check` makes live TypeSafe calls (an answer Super Jev already saved is
+`ask` or `check` makes live TypeSafe calls (an answer Super Clef already saved is
 served without one). A connect makes them only with a model writer (the default
 when the `claude` CLI is installed); a `--writer builtin` connect makes none
 unless you add `--findability`.
@@ -133,10 +133,10 @@ unless you add `--findability`.
    Want the proof file and line, or don't know which file holds the fact? Use
    `ask.py --claim` instead (see "Check a claim: which door" below).
 
-8. **Uninstall when your human asks** (removes everything Super Jev wrote, including logs,
+8. **Uninstall when your human asks** (removes everything Super Clef wrote, including logs,
    auto-heal state and an older chat CLI's config. It keeps the key file
    `~/.typesafe-api-key`: tell them to delete it if they want the key gone. Their files
-   are never touched, even one that sits in a folder Super Jev writes to):
+   are never touched, even one that sits in a folder Super Clef writes to):
 
    ```bash
    python3 skills/super-jev/setup.py --uninstall
@@ -147,13 +147,13 @@ unless you add `--findability`.
 - Before you state a fact from their files: run `ask`, open the top file, read it.
 - Before you send an answer: run `check FILE --claim "..."` with each claim and the file you read,
   or `ask.py --claim "..."` when you do not know which file holds the fact. Only exit 0 is a pass.
-- Nothing found means say "Super Jev couldn't find it; it may still exist" and offer to search by hand, never a guess.
+- Nothing found means say "Super Clef couldn't find it; it may still exist" and offer to search by hand, never a guess.
 - When their files change, run `python3 skills/super-jev/prepare_bulk.py --pointer NAME --principal me --refresh`:
   it replays how the folder was connected, writer included. An ask also starts that refresh in the
   background; if it says `auto-heal: last refresh FAILED: <reason>`, run the refresh command printed on that line.
 - A question you ask again saves itself: when the same file wins it N times
-  (`SUPERJEV_SAVE_AFTER`, default 2) and passes the check, the next ask returns it at once,
-  labelled saved (auto-save on by default; `--no-auto` or `SUPERJEV_AUTO_CACHE=0` to opt out).
+  (`SUPERCLEF_SAVE_AFTER`, default 2) and passes the check, the next ask returns it at once,
+  labelled saved (auto-save on by default; `--no-auto` or `SUPERCLEF_AUTO_CACHE=0` to opt out).
   `--miss` on a saved question un-saves it; hits print `approved_by: auto-save|principal:NAME`.
 - `ask.py --approve`, `--miss` and `--add` save a good answer at once and log misses; see
   [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) step 7. Approve takes the
@@ -225,7 +225,7 @@ ln -s "$(pwd)/skills/super-jev" ~/.claude/skills/super-jev
 ln -s "$(pwd)/skills/super-jev-connect" ~/.claude/skills/super-jev-connect
 ```
 
-`skills/super-jev-build-cycle/` is an optional third skill: a plain-CLI build cycle (`build_cycle.py`) that uses Super Jev in every step and leaves a receipt per step. Link it into any agent's skills folder next to `super-jev` (it finds `../super-jev/`).
+`skills/super-jev-build-cycle/` is an optional third skill: a plain-CLI build cycle (`build_cycle.py`) that uses Super Clef in every step and leaves a receipt per step. Link it into any agent's skills folder next to `super-jev` (it finds `../super-jev/`).
 
 | subcommand | wraps | what it needs |
 | --- | --- | --- |
@@ -242,3 +242,5 @@ ln -s "$(pwd)/skills/super-jev-connect" ~/.claude/skills/super-jev-connect
 Full reference, the exit-code table, and the `ask` routing keywords: [`skills/super-jev/SKILL.md`](skills/super-jev/SKILL.md).
 
 Tests: `python3 -m pytest skills/super-jev/tests -q`, or `npm run test:skill` (pytest goes in a venv; see [GETTING-STARTED](docs/GETTING-STARTED.md) step 1). Fully offline; every wrapped door is a fake in the test suite.
+
+Environment names: set `SUPERCLEF_X` for STATE_DIR, PRINCIPAL, CLEF_HOST, CLEF_DIR, JUDGE, BIN_DIR, INSTALL_DIR, REPO_URL, SAVE_AFTER, AUTO_CACHE. The older `SUPERJEV_X` name still works; `SUPERCLEF_X` wins when both are set.

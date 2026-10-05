@@ -1,8 +1,8 @@
 # Super Clef
 
-A competing version of Super Jev whose judge is Cloudflare **clef-flash** (Apache-2.0, 4-bit) running on a second Apple-silicon machine reached over ssh. It searches the **same connected files** as Super Jev, has its own terminal app, and makes no paid judge calls and needs no TypeSafe key.
+Your agent asks in its own words; Super Clef finds the file in your connected notes, checks the claim, and remembers what you approved. The judge is Cloudflare **clef-flash** (Apache-2.0, 4-bit) running on a second Apple-silicon machine reached over ssh. It has its own terminal app, and makes no paid judge calls and needs no TypeSafe key.
 
-Status: v0.2.0. Everything below the "Super Jev" heading is the Super Jev manual this build started from (Super Jev main at 739926b); where it says Jev, read "the judge" and see this section for what changed.
+Status: v0.2.0. The reference manual below covers every command; where it says Jev, read "the judge" (see "How the clef judge works").
 
 ## Use it
 
@@ -14,21 +14,27 @@ node bin/superclef.js --version               super-clef 0.2.0
 node bin/superclef.js setup                   check this Mac is ready (one time)
 node bin/superclef.js connect <folder>        connect a folder of notes (.md)
 node bin/superclef.js disconnect <name>       forget a connected folder (your files stay)
-scripts/install-superclef.sh                  put `superclef` on your PATH (~/.local/bin; never touches `superjev`)
+scripts/install-superclef.sh                  put `superclef` on your PATH (~/.local/bin)
 ```
 
-Super Clef keeps its own state in `~/.local/state/super-clef` (override: `SUPERJEV_STATE_DIR`); it never writes to Super Jev's folders or the installed Super Jev skill. Set `SUPERJEV_PRINCIPAL` to ask as a given agent (default `me`).
+Super Clef keeps its own state in `~/.local/state/super-clef` (override: `SUPERCLEF_STATE_DIR`). Set `SUPERCLEF_PRINCIPAL` to ask as a given agent (default `me`).
+
+## Environment names
+
+Set any of these as `SUPERCLEF_X`. The older `SUPERJEV_X` name still works; when both are set, `SUPERCLEF_X` wins.
+
+`STATE_DIR`, `PRINCIPAL`, `CLEF_HOST`, `CLEF_DIR`, `JUDGE`, `BIN_DIR`, `INSTALL_DIR`, `REPO_URL`, `SAVE_AFTER`, `AUTO_CACHE`.
 
 ## Setup: the judge host
 
-The clef judge runs on a second Apple-silicon machine reached over ssh (key login, `BatchMode`). There is no default host: set `SUPERJEV_CLEF_HOST` to its ssh target (for example `user@clef-host`) before using Super Clef; without it every judge call stops with an error naming that variable. Optional: `SUPERJEV_CLEF_DIR` (the clef folder on that machine, default `~/clef-test`). For the live scripts also set `EVALSET` (eval jsonl); `scripts/head-to-head.sh` also needs `OUT`, `WORK` and `JEV_STATE_DIR`. `SUPERJEV_PRIVATE_DIRS` (colon-separated) lists folders the media door must never read.
+The clef judge runs on a second Apple-silicon machine reached over ssh (key login, `BatchMode`). There is no default host: set `SUPERCLEF_CLEF_HOST` to its ssh target (for example `user@clef-host`) before using Super Clef; without it every judge call stops with an error naming that variable. Optional: `SUPERCLEF_CLEF_DIR` (the clef folder on that machine, default `~/clef-test`). For the live scripts also set `EVALSET` (eval jsonl); `scripts/head-to-head.sh` also needs `OUT`, `WORK` and `JEV_STATE_DIR`. `SUPERJEV_PRIVATE_DIRS` (colon-separated) lists folders the media door must never read.
 
 ## Prepare the judge machine
 
 One-time setup on the second Apple-silicon machine. The steps follow how our own judge machine was built (Apple silicon, 16 GB, macOS, Python 3.12 venv made with uv, 5.8 GB model folder). Unverified: other RAM sizes (the code allows for about 12 GB peak) and a from-scratch run of these exact commands on a clean machine.
 
 1. Make sure this Mac can `ssh user@clef-host` with a key and no password prompt (Super Clef uses `ssh -o BatchMode=yes`).
-2. On the judge machine, make the folder and a Python 3.12 venv named `.venv` inside it. The folder must be `~/clef-test`, or set `SUPERJEV_CLEF_DIR` to another one:
+2. On the judge machine, make the folder and a Python 3.12 venv named `.venv` inside it. The folder must be `~/clef-test`, or set `SUPERCLEF_CLEF_DIR` to another one:
    ```
    mkdir -p ~/clef-test && cd ~/clef-test
    uv venv --python 3.12 .venv
@@ -45,14 +51,14 @@ One-time setup on the second Apple-silicon machine. The steps follow how our own
 
 Not verified by me: step 4 and 5 were not re-run for this section (the model is loaded by other jobs on the live machine); the folder and package facts above were read from the live machine.
 
-## What changed from Super Jev
+## How the clef judge works
 
-- **Judge**: profile `clef` (default) in `skills/super-jev/judge_profiles.json`, behind the same judge seam (`judges.ask`). `lib/clef_client.py` pipes one short package over `ssh` to the clef directory (`SUPERJEV_CLEF_DIR`, default `~/clef-test`) on a second Apple-silicon machine reached over ssh (`.venv/bin/python`, `clef_mlx`), under a lock so only one clef process runs at a time. The payload goes to a temp dir on the clef machine that a trap deletes after every call, success or failure. `SUPERJEV_JUDGE=typesafe-jev` selects the Jev judge again.
-- **Short package** (harness report, shape A: pick one file or none): at most 4 files, each cut to about 120 tokens around the question's words, one question, about 600 tokens, 6-7 s on the M1 plus 3 s model load. The free shortlist (word search plus an idf-ranked table-of-contents list) replaces Jev's table-of-contents pick.
+- **Judge**: profile `clef` (default) in `skills/super-jev/judge_profiles.json`, behind the same judge seam (`judges.ask`). `lib/clef_client.py` pipes one short package over `ssh` to the clef directory (`SUPERCLEF_CLEF_DIR`, default `~/clef-test`) on a second Apple-silicon machine reached over ssh (`.venv/bin/python`, `clef_mlx`), under a lock so only one clef process runs at a time. The payload goes to a temp dir on the clef machine that a trap deletes after every call, success or failure. `SUPERCLEF_JUDGE=typesafe-jev` selects the hosted Jev judge instead.
+- **Short package** (harness report, shape A: pick one file or none): at most 4 files, each cut to about 120 tokens around the question's words, one question, about 600 tokens, 6-7 s on the M1 plus 3 s model load. The free shortlist (word search plus an idf-ranked table-of-contents list) replaces a table-of-contents pick.
 - **Trust**: clef's "none", and any pick above 0.9, are low trust (it is overconfident when the answer is absent). Those files are listed as possible with a note, never confirmed, and are never saved automatically. A claim check is a lead: TRUE/FALSE carries a "confirm in the proof file" line and is not cached.
 - **Your files**: `superclef connect <folder>` connects a folder of notes; `superclef disconnect <name>` forgets it (the originals are never touched). Connected sets are read in place; no file contents leave this Mac except the per-question package.
 - **Images and video**: `superclef media connect|ask|list|remove`; clef reads them directly (no audio; cut-off text is not reliable).
-- **Not done yet**: saving a new answer, `verify` and the Stop gate (they need the TypeSafe provider), and recall on questions whose wording differs from the file (Jev's judge read table-of-contents pages for that; clef reads one short package).
+- **Not done yet**: saving a new answer, `verify` and the Stop gate (they need the TypeSafe provider), and recall on questions whose wording differs from the file (the hosted judge reads table-of-contents pages for that; clef reads one short package).
 
 ## Tests
 
@@ -63,11 +69,10 @@ npm run e2e:clef         live: imports state, asks 2 questions from your eval js
 
 ---
 
-# Super Jev
+# Reference manual
 
-[![Tests](https://github.com/Kevthetech143/super-jev/actions/workflows/test.yml/badge.svg)](https://github.com/Kevthetech143/super-jev/actions/workflows/test.yml)
 
-One judge (Jev) between your agent and your data: the agent asks in its own words, Super Jev finds the file, checks the claim, permits the action, and remembers what you approved. Your agent stays responsible for the answer.
+One judge (Jev) between your agent and your data: the agent asks in its own words, Super Clef finds the file, checks the claim, permits the action, and remembers what you approved. Your agent stays responsible for the answer.
 
 ## Vision
 
@@ -135,7 +140,7 @@ Tested on macOS and Linux. Windows is untested.
 | Scope | Detail |
 |---|---|
 | Reads | Your connected folders and configured skill roots. |
-| Writes | State dir under your home — `$SUPERJEV_STATE_DIR` or `~/.local/state/super-clef/` (Super Clef's own folder; it never writes to Super Jev's state) (per-principal logs, the `_memory/` config and pointer store `setup.py` creates) — plus `skills/super-jev/prepare-cache/`, `skills/super-jev/ledger/` and `skills/super-jev/autoheal-state/` (background-refresh locks, cooldowns and logs that name your sets and files) in the checkout. The terminal app saves a key you paste to `~/.typesafe-api-key` (owner-only; the same file the setup steps export the key from), and `scripts/install-superclef.sh` writes a launcher at `~/.local/bin/superclef` (Super Jev's `install.sh` and its `superjev` launcher are not used here). Older versions kept a config holding the key at `~/.config/superjev/config.json` (or `$XDG_CONFIG_HOME/superjev/`). |
+| Writes | State dir under your home — `$SUPERCLEF_STATE_DIR` or `~/.local/state/super-clef/` (Super Clef's own folder) (per-principal logs, the `_memory/` config and pointer store `setup.py` creates) — plus `skills/super-jev/prepare-cache/`, `skills/super-jev/ledger/` and `skills/super-jev/autoheal-state/` (background-refresh locks, cooldowns and logs that name your sets and files) in the checkout. The terminal app saves a key you paste to `~/.typesafe-api-key` (owner-only; the same file the setup steps export the key from), and `scripts/install-superclef.sh` writes a launcher at `~/.local/bin/superclef`. Older versions kept a config holding the key at `~/.config/superjev/config.json` (or `$XDG_CONFIG_HOME/superjev/`). |
 | Leaves the machine | Sent to the TypeSafe provider: file text when `ask` reads a file to confirm an answer, descriptions (a builtin description quotes the file's first words) and questions (to rank files), and the claim plus evidence files you pass to `check`. A connect sends file text only with a model writer (the default when the `claude` CLI is installed): the writer model reads an excerpt of each file and TypeSafe checks each description against its file. `--writer builtin` sends nothing while connecting, unless you add `--findability`: that runs one ranking search per file, which sends the descriptions and that file's sample question. |
 | Provider receives | The above; never files the secret scan holds — those stay local. |
 | Never leaves | Files the secret scan holds, and files connect skips by default below a `--root` you connect (folders named `profile/` or `documents/`, hidden and generated folders, other file types), unless you pass one to `check` yourself; connect prints a `SKIP` line for each kind. |
@@ -146,7 +151,7 @@ Tested on macOS and Linux. Windows is untested.
 python3 skills/super-jev/setup.py --uninstall
 ```
 
-Removes everything Super Clef wrote (never Super Jev's own state): the state directory (`$SUPERJEV_STATE_DIR` or
+Removes everything Super Clef wrote: the state directory (`$SUPERCLEF_STATE_DIR` or
 `~/.local/state/super-clef`: the memory config, connected pointers, cached answers and
 logs), `skills/super-jev/prepare-cache/`, `ledger/` and `autoheal-state/` in this
 checkout, an older app's config (`~/.config/superjev/config.json`, which held the key),

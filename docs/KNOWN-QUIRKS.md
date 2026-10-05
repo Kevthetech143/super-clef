@@ -64,7 +64,7 @@ Each quirk: what you see, why it happens (if known), and the workaround.
 
 ## 11. Env var names from the author's harness
 **Symptom:** `superjev.py` reads `CLAW4MAC_SESSION_ID`, `CLAW4MAC_BOT_ID` and `CLAUDE_BOT_ID` to derive a principal name.
-**Cause:** compatibility with the harness Super Jev was built in. They are optional; unset, the principal comes from `--principal`.
+**Cause:** compatibility with the harness Super Clef was built in. They are optional; unset, the principal comes from `--principal`.
 **Workaround:** pass `--principal` explicitly. 1.1 renames them to `SUPERJEV_*` with a fallback.
 
 ## 12. Paraphrased claims can come back NOT_SUPPORTED

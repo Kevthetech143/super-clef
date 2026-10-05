@@ -1,6 +1,6 @@
 # Plug-in arms and a swappable judge
 
-super-jev's gate is a stack of independent checks over one draft and the
+Super Clef's gate is a stack of independent checks over one draft and the
 evidence window behind it. Until now those checks were inline calls in
 `superjev.py`: adding one meant editing the gate, and swapping one out
 meant editing the gate again. This is the plug-in layer that replaces
