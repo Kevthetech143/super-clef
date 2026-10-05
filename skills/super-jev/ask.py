@@ -2839,7 +2839,6 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
             # A refresh re-registered the set while Jev routed it (a stale set is routed now,
             # so a background refresh can land mid-call): ask it once more at its new generation.
             results[i] = nav(ptr)
-    reconnected = {}
     # A note written into a connected folder after its connect is not in the pointer's file list,
     # so nothing marks the pointer stale: look for such files now and then (background, bounded)
     # and refresh their pointers, so a later lookup finds them without a hand reconnect.
@@ -2900,11 +2899,10 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
             result = None
             if stale and not replay:
                 result = auto_heal.heal_in_background(ptr, principal, view=ptr in view_pointers)
-                reconnected[ptr] = result
                 if result in ("started", "in-progress"):
-                    healing.add(ptr)
+                    healing.add(ptr)  # "no-recipe", "held", "manual": nothing is refreshing, so never claimed
                 if result == "started":
-                    heal_note = " (auto-heal: refresh started in background)"
+                    heal_note = " (refreshing in the background; ask again in a minute)"
                 elif result == "in-progress":
                     heal_note = " (auto-heal: a refresh of this set is running, or the agent is at its limit of refreshes; queued, it runs when one finishes)"
                 elif result == "cooldown":

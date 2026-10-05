@@ -643,6 +643,24 @@ def maybe_heal(pointer: str, principal: str, cache_dir: Path = None,
     return "started"
 
 
+def _recipe_gate(pointer: str, principal: str) -> str:
+    """Why a recipe replay must not be started now, read-only (the checks reconnect_recipe makes
+    before it admits one): "no-recipe", "held", "cooldown", else "" (go)."""
+    try:
+        got = _memory({"action": "recipe", "pointer": pointer, "principal": principal})
+    except Exception:
+        got = {}
+    recipe = got.get("recipe") if got.get("status") == "ok" else None
+    if not isinstance(recipe, dict):
+        return "no-recipe"
+    state = _load_state(principal)
+    paths = [str(s.get("path")) for s in recipe.get("sources") or [] if isinstance(s, dict)]
+    mark = state.get("held", {}).get(pointer) or {}
+    if mark.get("fp") == _fingerprint(paths, recipe) and time.time() - mark.get("ts", 0) < HELD_EXPIRE_SECS:
+        return "held"
+    return "cooldown" if _wait_secs(state, pointer, time.time()) > 0 else ""
+
+
 def heal_in_background(pointer: str, principal: str, view: bool = False) -> str:
     """What an ask does for a stale set: start its heal and return at once, whatever the set count.
     A changed set gets maybe_heal's refresh; a set with nothing to redraft (no-change), or built
@@ -656,7 +674,12 @@ def heal_in_background(pointer: str, principal: str, view: bool = False) -> str:
     if result == "no-report":
         if "-manual-" in pointer:
             return "manual"
+        why = _recipe_gate(pointer, principal)
+        if why:
+            return why
         _queue(principal, pointer, "recipe")
+        if _live_locks(principal, pointer) >= MAX_CONCURRENT:
+            return "in-progress"  # queued: a running refresh's drain replays it when it ends
         token = _acquire_lock(principal, pointer)
         if token:
             _hand_off(principal, pointer, token)  # starts the drain that replays the recipe

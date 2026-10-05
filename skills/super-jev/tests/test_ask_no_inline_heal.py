@@ -83,9 +83,62 @@ def test_heal_in_background_starts_a_reconnect_without_waiting(tmp_path, monkeyp
     assert waits == [0] and len(Proc.launched) == 1 and "--no-findability" in Proc.launched[0][-1]
 
 
-def test_heal_in_background_queues_a_recipe_set_for_a_drain(tmp_path, monkeypatch):
-    from test_auto_heal_fresh import Proc, _setup, ah as real
-    _setup(tmp_path, monkeypatch, names=())  # no report: a set connected from a recipe
-    assert real.heal_in_background("gamma", "tester") == "started"
-    assert real._load_state("tester")["pending"]["gamma"]["kind"] == "recipe"
+def test_heal_in_background_leaves_a_manual_note_alone(tmp_path, monkeypatch):
+    from test_auto_heal_fresh import _setup, ah as real
+    _setup(tmp_path, monkeypatch, names=())
     assert real.heal_in_background("gamma-manual-1", "tester") == "manual"
+
+
+# --- a recipe set is gated before any drain is spawned ------------------------------------------------
+
+def _recipe_world(tmp_path, monkeypatch):
+    from test_auto_heal_fresh import Proc, _setup, ah as real
+    _setup(tmp_path, monkeypatch, names=())
+    src = tmp_path / "notes" / "gamma.md"
+    src.parent.mkdir(exist_ok=True)
+    src.write_text("# gamma\n")
+    rec = {"pointer": "gamma", "dataset": "d", "principals": ["tester"], "structure": {}, "sources": [{"path": str(src)}]}
+    monkeypatch.setattr(real, "_memory", lambda req: {"status": "ok", "recipe": rec})
+    spawned = []
+    monkeypatch.setattr(real, "_spawn_detached", lambda argv: spawned.append(argv) or Proc(argv))
+    return real, spawned, rec
+
+
+def test_a_second_ask_during_cooldown_spawns_nothing(tmp_path, monkeypatch):
+    real, spawned, _ = _recipe_world(tmp_path, monkeypatch)
+    assert real.heal_in_background("gamma", "tester") == "started" and len(spawned) == 1
+    assert real._load_state("tester")["pending"]["gamma"]["kind"] == "recipe"  # queued for the drain
+    real._settle("tester", "gamma", False)  # the replay failed: the pointer waits out its retry
+    real._release_lock("tester", "gamma")
+    assert real.heal_in_background("gamma", "tester") == "cooldown" and len(spawned) == 1
+
+
+def test_a_held_set_spawns_nothing(tmp_path, monkeypatch):
+    real, spawned, rec = _recipe_world(tmp_path, monkeypatch)
+    fp = real._fingerprint([rec["sources"][0]["path"]], rec)
+    with real._state_txn("tester") as st:
+        st["held"]["gamma"] = {"fp": fp, "ts": real.time.time()}
+    assert real.heal_in_background("gamma", "tester") == "held" and not spawned
+
+
+def test_the_concurrency_cap_is_respected(tmp_path, monkeypatch):
+    real, spawned, _ = _recipe_world(tmp_path, monkeypatch)
+    monkeypatch.setattr(real, "_live_locks", lambda principal, besides: real.MAX_CONCURRENT)
+    assert real.heal_in_background("gamma", "tester") == "in-progress" and not spawned
+    assert real._load_state("tester")["pending"]["gamma"]["kind"] == "recipe"  # queued, not dropped
+
+
+def test_a_set_with_no_recipe_is_not_claimed_as_refreshing(tmp_path, monkeypatch, capsys, notes):
+    import json
+    stale_world(tmp_path, monkeypatch, notes, 1, with_list=False)
+    monkeypatch.setattr(ah, "heal_in_background", lambda *a, **k: "no-recipe")
+    _, out = run(monkeypatch, capsys, "--json", Q)
+    assert [u["healing"] for u in json.loads(out)["unsearched"]] == [False]
+    assert "refreshing in the background" not in out and "refresh started" not in out
+
+
+def test_a_started_heal_says_to_ask_again_in_a_minute(tmp_path, monkeypatch, capsys, notes):
+    stale_world(tmp_path, monkeypatch, notes, 1, with_list=False)
+    monkeypatch.setattr(ah, "heal_in_background", lambda *a, **k: "started")
+    _, out = run(monkeypatch, capsys, Q)
+    assert "refreshing in the background; ask again in a minute" in out
