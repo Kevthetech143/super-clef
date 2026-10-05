@@ -190,3 +190,24 @@ def test_symlinked_socket_folder_is_still_refused(tmp_path, monkeypatch):
     (HOME / ".ssh").symlink_to(tmp_path / "elsewhere")
     with pytest.raises(clef_client.Unreachable):
         clef_client._ssh_cmd("true")
+
+
+# --- custom memory.sh wrappers fall back to their own process --------------------------------------
+def _wrapper_skill(tmp_path, monkeypatch, body):
+    skill = tmp_path / "skill" / "super-jev"
+    skill.mkdir(parents=True)
+    (skill / "memory.sh").write_text(body)
+    monkeypatch.delenv("SUPERJEV_REPO", raising=False)
+    monkeypatch.delenv("SUPERJEV_MEMORY_WRAPPER_ACTIVE", raising=False)
+    return skill
+
+
+def test_wrapper_exporting_another_repo_is_left_to_its_process(tmp_path, monkeypatch):
+    skill = _wrapper_skill(tmp_path, monkeypatch, 'export SUPERJEV_REPO=/elsewhere\nexec python3 d.py memory --config /x/c.json "$@"\n')
+    assert dispatch.run_memory(skill, {"action": "panel", "principal": "me"}) is None
+
+
+def test_wrapper_with_no_runtime_at_its_guessed_repo_is_left_to_its_process(tmp_path, monkeypatch):
+    skill = _wrapper_skill(tmp_path, monkeypatch,
+                           'export SUPERJEV_REPO="$(cd -- "$DIR/../.." && pwd -P)"\nexec python3 d.py memory --config /x/c.json "$@"\n')
+    assert dispatch.run_memory(skill, {"action": "panel", "principal": "me"}) is None

@@ -50,20 +50,27 @@ def run_memory(skill_dir: Path, req: dict):
     """The memory action `req` answered in this process: the result dict `dispatch.py memory --input` would
     print, or None when only a subprocess can answer (memory.sh is a custom wrapper whose --config this cannot
     read). Same repo, config and error answers as command(); the one difference is no Python start-up."""
-    if _wrapper_in_use(skill_dir, []):
+    wrapped = _wrapper_in_use(skill_dir, [])
+    if wrapped:
         wrapper = skill_dir / "memory.sh"
-        found = re.search(r"--config[ =]+(?:\"([^\"]+)\"|'([^']+)'|(\S+))", wrapper.read_text())
+        body = wrapper.read_text()
+        found = re.search(r"--config[ =]+(?:\"([^\"]+)\"|'([^']+)'|(\S+))", body)
         if not found or "$" in "".join(g or "" for g in found.groups()):
+            return None
+        # The wrapper's repo is "$DIR/../.."; any other SUPERJEV_REPO it exports is one only its process honours.
+        if any("$DIR/../.." not in line for line in re.findall(r"SUPERJEV_REPO=(.*)", body)):
             return None
         repo, config = (skill_dir / ".." / "..").resolve(), next(g for g in found.groups() if g)
     else:
         repo = Path(os.environ["SUPERJEV_REPO"]) if os.environ.get("SUPERJEV_REPO") else Path(__file__).resolve().parents[2]
         config = str(config_path())
     entry = repo / "experiments/verified-pointer-memory/cli.py"
+    if wrapped and not entry.is_file():
+        return None  # let the wrapper's own process report it
     try:
         if not entry.is_file():
             raise MissingDependency(str(entry))
-        if not Path(config).is_file() and not _wrapper_in_use(skill_dir, []):
+        if not Path(config).is_file() and not wrapped:
             raise NotSetUp(str(config))
     except NotSetUp as exc:
         return {"status": "error", "reason": "not-set-up",
@@ -77,11 +84,11 @@ def run_memory(skill_dir: Path, req: dict):
     cli = _CLI_MODULES.get(entry)
     if cli is None:
         if str(entry.parent) not in sys.path:
-            sys.path.insert(0, str(entry.parent))  # cli.py imports its sibling service.py
+            sys.path.append(str(entry.parent))  # cli.py imports its sibling service.py
         spec = importlib.util.spec_from_file_location("_verified_pointer_cli", entry)
         cli = _CLI_MODULES[entry] = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cli)
-    return cli.handle(req, config)
+    return json.loads(json.dumps(cli.handle(req, config)))
 
 
 def command(skill_dir: Path, tool: str, args: list[str]) -> list[str]:

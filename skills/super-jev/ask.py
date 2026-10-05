@@ -244,7 +244,7 @@ def memory(req: dict) -> dict:
         # In this process: a Python start-up per memory call cost ~0.4 s each, several times an ask.
         out = dispatch.run_memory(SKILL.parent, json.loads(json.dumps(req)))
     except Exception as e:
-        return {"status": "error", "raw": f"{type(e).__name__}: {e}"[-300:]}
+        return {"status": "error", "raw": type(e).__name__}
     if out is not None:
         return out
     # A custom memory.sh whose config this cannot read: only its own process can answer.
