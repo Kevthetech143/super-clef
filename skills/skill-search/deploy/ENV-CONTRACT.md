@@ -23,8 +23,8 @@ references the wrapper.
    wrapper runs, the wrapper MUST NOT call the provider and MUST NOT
    overwrite the value.
 3. No key, no provider, or a failing/empty provider: the wrapper runs the
-   launcher with `--local-only`, prints one stderr note
-   (`no TypeSafe key ... local-only`), and exits 0 with status `suggestions`
+   launcher with `--local-only`, prints the stderr note
+   (`no TypeSafe key ... local-only`) only when `SKILL_SEARCH_VERBOSE=1`, and exits 0 with status `suggestions`
    and source `local`. It never claims a live search.
 4. No keyless live claim: without a key in the environment, the runtime
    reports `fallback` honestly. A fallback is never a

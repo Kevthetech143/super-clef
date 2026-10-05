@@ -1,7 +1,7 @@
 #!/bin/sh
 # Key hook for the skill finder: search.sh runs it for every live search. With TYPESAFE_API_KEY
 # in the environment it does nothing; otherwise it asks the provider command for the key.
-# With no key and no provider (or a failing one) it falls back to --local-only and says so on stderr.
+# With no key and no provider (or a failing one) it falls back to --local-only quietly (the note prints on stderr only with SKILL_SEARCH_VERBOSE=1).
 # See ENV-CONTRACT.md for the exact contract.
 set -u
 for arg in "$@"; do
@@ -10,7 +10,7 @@ for arg in "$@"; do
   fi
 done
 LOCAL_NOTE='skill-search: no TypeSafe key, so this is a local-only ranking (unverified guesses)'
-local_only() { printf '%s\n' "$LOCAL_NOTE" >&2; exec bash "$(dirname "$0")/../launcher.sh" "$@" --local-only; }
+local_only() { [ -z "${SKILL_SEARCH_VERBOSE:-}" ] || printf '%s\n' "$LOCAL_NOTE" >&2; exec bash "$(dirname "$0")/../launcher.sh" "$@" --local-only; }
 PROVIDER="${SKILL_SEARCH_PROVIDER_CMD:-}"
 if [ -z "${TYPESAFE_API_KEY:-}" ]; then
   [ -n "$PROVIDER" ] || local_only "$@"
