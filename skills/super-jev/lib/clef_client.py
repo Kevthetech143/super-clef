@@ -22,7 +22,7 @@ mktemp dir that a trap removes. If the daemon cannot start or answer, the call s
 one-shot path above, so a warm failure costs time, never a verdict.
 
 Env: SUPERJEV_CLEF_HOST (required, the ssh target, e.g. user@clef-host), SUPERJEV_CLEF_DIR (default ~/clef-test on that machine),
-SUPERJEV_CLEF_WARM (default 1; 0 = always one-shot), SUPERJEV_CLEF_IDLE (default 7200; the resident model is about 4 GB).
+SUPERJEV_CLEF_WARM (default 1; 0 = always one-shot), SUPERJEV_CLEF_IDLE (default 7200; the resident model is about 4.6 GB).
 """
 import json
 import os
@@ -51,7 +51,7 @@ REMOTE_DIR = os.environ.get("SUPERJEV_CLEF_DIR", "~/clef-test")
 MARK = "CLEFJSON:"
 LOCK_WAIT_SECS = 240
 WARM = os.environ.get("SUPERJEV_CLEF_WARM", "1") != "0"
-DEFAULT_IDLE_SECS = 7200  # a cold start costs about 4.5 s; the warm daemon holds about 4 GB on the clef machine
+DEFAULT_IDLE_SECS = 7200  # a cold start costs about 4.5 s; the warm daemon holds about 4.6 GB on the clef machine
 
 
 def _idle_secs(raw):

@@ -21,3 +21,8 @@ def test_every_entrypoint_imports_it_before_local_modules():
     for name in ("ask", "setup", "prepare_bulk", "clef_media", "refresh_changed", "auto_heal"):
         src = (SKILL / f"{name}.py").read_text()
         assert "import superclef_env" in src, name
+
+
+def test_clef_idle_and_warm_have_public_names():
+    code = "import superclef_env,os;print(os.environ.get('SUPERJEV_CLEF_IDLE'),os.environ.get('SUPERJEV_CLEF_WARM'))"
+    assert _run({"SUPERCLEF_CLEF_IDLE": "5400", "SUPERCLEF_CLEF_WARM": "0"}, code) == "5400 0"

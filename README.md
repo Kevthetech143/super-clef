@@ -23,7 +23,9 @@ Super Clef keeps its own state in `~/.local/state/super-clef` (override: `SUPERC
 
 Set any of these as `SUPERCLEF_X`. Setups from before the rename may still use `SUPERJEV_X`; that name keeps working, and when both are set, `SUPERCLEF_X` wins. The skill folders are still named `skills/super-jev/...` (folder name kept for now); where a command below needs a path, type it as shown.
 
-`STATE_DIR`, `PRINCIPAL`, `CLEF_HOST`, `CLEF_DIR`, `JUDGE`, `BIN_DIR`, `INSTALL_DIR`, `REPO_URL`, `SAVE_AFTER`, `AUTO_CACHE`, `PRIVATE_DIRS`, `GATE_CMD`, `NEW_FILE_SCAN`.
+`STATE_DIR`, `PRINCIPAL`, `CLEF_HOST`, `CLEF_DIR`, `JUDGE`, `BIN_DIR`, `INSTALL_DIR`, `REPO_URL`, `SAVE_AFTER`, `AUTO_CACHE`, `PRIVATE_DIRS`, `GATE_CMD`, `NEW_FILE_SCAN`, `CLEF_IDLE`, `CLEF_WARM`.
+
+The warm judge holds about 4.6 GB on the clef machine for the idle window (default 2 h); on a machine that also runs other models, lower `SUPERCLEF_CLEF_IDLE` or set `SUPERCLEF_CLEF_WARM=0`.
 
 ## Setup: the judge host
 
