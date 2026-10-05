@@ -74,3 +74,20 @@ def test_a_dead_judge_is_named_plainly(tmp_path, monkeypatch, capsys):
     assert "judge" in out.lower() and "clef machine unreachable" in out
     assert not out.startswith("OUTCOME: no"), out
     print(out)
+
+
+def test_unreachable_judge_exits_3_and_trace_has_clef_not_found(tmp_path, monkeypatch, capsys):
+    import pytest
+    def down(s, q, timeout=0):
+        raise judges.Unreachable("could not reach the judge")
+    top, _ = _run(tmp_path, monkeypatch, capsys)  # baseline run with the base error
+    monkeypatch.setattr(judges, "ask", down)
+    ask._STAGE.clear()
+    sdir = tmp_path / "state2"
+    sdir.mkdir()
+    rc = ask.lookup(Q, "me", sdir)
+    out = capsys.readouterr().out
+    assert rc == 3 and "Judge unreachable" in out
+    traces = [json.loads(l) for f in sdir.rglob("*.jsonl") for l in f.read_text().splitlines() if '"trace"' in l]
+    if traces:
+        assert "clef_not_found" in traces[-1]["stages"]

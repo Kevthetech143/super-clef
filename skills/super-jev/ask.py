@@ -2229,6 +2229,8 @@ def clef_confirm(question: str, paths: list):
         prob = probs.get(choice) if isinstance(probs, dict) else pick.get("probability")
     except (judges.JudgeError, KeyError, TypeError, AttributeError) as e:
         _STAGE["clef"] = {"error": f"{type(e).__name__}: {str(e)[:160]}", "secs": round(time.time() - t0, 1)}
+        if isinstance(e, judges.Unreachable):
+            _STAGE["judge_unreachable"] = True
         return {}, set(), f"clef judge gave no verdict: {str(e)[:160]}", notes
     _STAGE["clef"] = {"pick": choice, "prob": prob, "files": [Path(p).name for p in shown], "secs": round(time.time() - t0, 1),
                       "input_tokens": r.get("input_tokens"), "judge_secs": r.get("secs")}
@@ -2692,8 +2694,8 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
         if prepare_bulk.CACHE_DIR == watched.state_cache_dir():
             watched.migrate_cache(prepare_bulk.CACHE_DIR)
     if CLEF and pointers and not any(prepare_bulk.CACHE_DIR.glob("*.json")) and not any(_LOCAL_ROWS.values()):
-        fix = "superclef import-state --from-superjev"
-        print(f"Not set up yet: nothing has been prepared. run: {fix}, or reconnect")
+        fix = "superclef connect <folder>"
+        print(f"Not set up yet: nothing has been prepared. run: {fix}")
         _RESULT.update(files=[], skills=[], errors=[], left_out=[],
                        unsearched=unsearched_rows(pointers, {p: "unprepared" for p in pointers}, set()))
         log(sdir, "lookup", question=question, pointers=len(pointers), result="first-run-no-cache",
@@ -3153,6 +3155,7 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
             "source_moves": _STAGE.get("source_moves") or [],
             "skills": _STAGE.get("skills"),
             "clef": _STAGE.get("clef"),
+            "clef_not_found": bool(_STAGE.get("clef_not_found")),
             "final": [{"score": s, "path": p,
                        "rule": ("inconclusive: routing score" if notes.get(p) == INCONCLUSIVE
                                 else "possible (word search)" if p in possible and p in wpaths
@@ -3212,6 +3215,10 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
         print(f"HELD  {p}  ({HELD_SECRET})")
     for line in error_lines:
         print(line)
+    judge_unreachable = bool(_STAGE.get("judge_unreachable")) and bool(check_error)
+    if judge_unreachable:
+        print("Judge unreachable: results are word-search order, unconfirmed. "
+              "Check the judge host (SUPERCLEF_CLEF_HOST) and try again.")
     # One outcome from the whole search state. A set that failed, is stale or is unprepared was not
     # fully searched, so it never reads as a complete not-found.
     edited_out = ([(p, EDITED_WHAT, EDITED_FIX) for p in edited["refresh"]]
@@ -3241,6 +3248,9 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
         if skills:
             parts.append(f"{len(skills)} skill suggestion{'s' if len(skills) != 1 else ''}")
         found = "; ".join(parts)
+        if judge_unreachable:  # files are listed, but the judge never confirmed them: exit 3, not 0
+            return _done("error", "judge unreachable: " + found + " (word-search order, unconfirmed)",
+                         "", "none")
         _RESULT["saved_now"] = autosave(principal, question, sdir, win)
         return _done("found", found + (f"; partial: {sets} not searched" if n else ""))
     if dropped and not listed:

@@ -65,7 +65,7 @@ def run(tmp_path, monkeypatch, capsys):
 def test_missing_cache_prints_the_fix_and_benches_nothing(run):
     go, tmp = run
     out, calls = go()
-    assert "run: superclef import-state --from-superjev, or reconnect" in out
+    assert "run: superclef connect <folder>" in out
     assert "navigate" not in calls
     health = tmp / "s" / "pointer_health.json"
     assert not health.exists() or not json.loads(health.read_text())
