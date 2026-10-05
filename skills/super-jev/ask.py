@@ -3432,7 +3432,7 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
             if result == "started":
                 heal_note = " (refreshing in the background; ask again in a minute)"
             elif result == "in-progress":
-                heal_note = " (auto-heal: a refresh of this set is running, or the agent is at its limit of refreshes; queued, it runs when one finishes)"
+                heal_note = " (auto-heal: a refresh of this set is running, or the agent is at its limit of refreshes; queued behind another set's refresh; it runs when its turn comes)"
             elif result == "cooldown":
                 err = auto_heal.last_refresh_error(principal, ptr)
                 heal_note = (f" (auto-heal: last refresh FAILED: {err}; retrying after cooldown)" if err
