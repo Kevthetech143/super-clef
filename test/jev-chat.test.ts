@@ -350,11 +350,11 @@ test('I2 needs refresh while healing: refreshing now, Ask again', () => {
   assert.match(s, /Ask again/);
 });
 
-test('I2b first run, unprepared set: says to import state, not "Couldn\'t search" or "was not refreshed"', () => {
-  const s = flat(R('ask', { outcome: 'needs-setup', why: 'x', next: 'refresh', cmd: 'superclef import-state --from-superjev',
+test('I2b first run, unprepared set: says to connect a folder, not "Couldn\'t search" or "was not refreshed"', () => {
+  const s = flat(R('ask', { outcome: 'needs-setup', why: 'x', next: 'refresh', cmd: 'superclef connect <folder>',
     unsearched: [{ set: 'team-notes-3fa9c1', root: '/Users/sam/Team Notes', state: 'unprepared', healing: false }] }));
-  assert.match(s, /run: superclef import-state --from-superjev \(or connect a folder\)/);
-  assert.doesNotMatch(s, /Couldn't search|was not refreshed/);
+  assert.match(s, /run: superclef connect <folder> \(a folder of Markdown notes\)/);
+  assert.doesNotMatch(s, /Couldn't search|was not refreshed|import-state|Super ?Jev/i);
 });
 
 test('I3 needs include: a file held for a secret at query time shows the engine\'s own words and way in', () => {
@@ -382,7 +382,7 @@ test('I4 connect with a held note and skipped files: Connected, a held line, lef
     { label: 'Team Notes' });
   assert.match(s, /^• Connected Team Notes: 25 notes · 1\.4s$/m);
   assert.match(s, /^ {2}Held back 1 note: looks like it holds a secret\n {4}ops\/creds\.md$/m);
-  assert.match(flat(s), /Left out 3 notes in folders skipped by default; drag a folder in on its own to connect it\./);
+  assert.match(flat(s), /Left out 3 notes in folders skipped by default; connect that folder on its own to include it\./);
   assert.match(flat(s), /Left out 2 files of other types; only \.md notes connect\./);
   assert.match(flat(s), /Left out 1 linked note pointing outside this folder\./);
   assert.equal((s.match(/only \.md notes connect/g) || []).length, 1, 'a repeated left-out row is shown once');
@@ -1642,15 +1642,16 @@ test('W5 at the one-shot door, a Next that points at dragging says how to open t
   const lonely = { outcome: 'needs-setup', why: 'nothing is connected for me', next: 'connect' };
   const miss = { outcome: 'not-found', why: 'x', next: 'connect', searched: { sets: 1, notes: 28 } };
   const stale = { outcome: 'needs-setup', why: 'x', next: 'refresh', unsearched: [{ set: 'a', root: '/Users/sam/Handbook', state: 'stale', healing: false }] };
-  const way = 'open the window \\(npm run clef, or superclef with no words\\), then';
-  for (const [d, rest] of [[lonely, 'drag a folder of Markdown notes in here'], [miss, 'drag in the folder that has it'], [stale, 'drag the folder in again to refresh it']] as const) {
-    assert.match(flat(R('ask', d, {}, { door: true })), new RegExp(`Next: ${way} ${rest}\\.`));
+  const way = 'open the window \\(npm run clef, or superclef with no words\\)';
+  for (const [d, rest, at] of [[lonely, 'drag a folder of Markdown notes in here', 'run: superclef connect <folder> \\(a folder of Markdown notes\\)'], [miss, 'drag in the folder that has it', 'run superclef connect <folder that has it>'], [stale, 'drag the folder in again to refresh it', 'run superclef connect <folder> again to refresh it']] as const) {
+    assert.match(flat(R('ask', d, {}, { door: true })), new RegExp(`Next: ${at}\\.`));
+    assert.ok(!/drag/.test(flat(R('ask', d, {}, { door: true }))), 'the door never says drag');
     assert.match(flat(R('ask', d)), new RegExp(`Next: ${rest}\\.`), 'the window says it as before');
     assert.ok(!new RegExp(way).test(flat(R('ask', d))), 'the window never points at itself');
   }
-  assert.match(flat(R('status', { next: 'connect', principal: 'me', sets: [] }, {}, { door: true })), new RegExp(`Next: ${way} drag a folder`));
+  assert.match(flat(R('status', { next: 'connect', principal: 'me', sets: [] }, {}, { door: true })), /Next: run: superclef connect <folder>/);
   const big = { connected: 0, refused: { kind: 'too_many', why: 'x', count: 1230, max: 250 } };
-  assert.match(flat(R('connect', big, { label: 'Everything' }, { door: true })), new RegExp(`Next: ${way} drag in a smaller folder inside it\\.`));
+  assert.match(flat(R('connect', big, { label: 'Everything' }, { door: true })), /Next: run superclef connect <a smaller folder inside it>\./);
   assert.match(flat(R('connect', big, { label: 'Everything' })), /Next: drag in a smaller folder inside it\./, 'the window says it as before');
 });
 
@@ -1676,7 +1677,7 @@ test('W5 whole app: the one-shot door with nothing connected tells a shell user 
   const r = rig([{ when: '--status', out: { v: 1, next: 'connect', principal: 'me', sets: [] } }, { when: '-- canary', code: 1, out: { v: 1, outcome: 'not-found', why: 'x', next: 'connect', searched: { sets: 1, notes: 4 } } }]);
   for (const args of [['/status'], ['canary question']]) {
     const d = await door(r, args);
-    assert.match(flat(d.out), /Next: open the window \(npm run clef, or superclef with no words\), then drag /, d.out);
+    assert.match(flat(d.out), /Next: run:? superclef connect <folder/, d.out);
   }
 });
 
@@ -1832,7 +1833,7 @@ test('K2b Ctrl+C during a door connect: the group gets SIGTERM, Stopped. says ho
     w.send('\x03');
     await until(() => termed(r), 1000, GROUP);
     assert.equal(await w.exit(), 130, w.text());
-    assert.match(flat(w.text()), /Stopped\. Some notes may be connected; open the window \(npm run clef, or superclef with no words\), then drag the folder in again to finish\./);
+    assert.match(flat(w.text()), /Stopped\. Some notes may be connected; run superclef connect <folder> again to finish\./);
     assert.ok(!r.calls().some((c: any) => c.script === 'setup.py'), 'setup.py was run for a stop');
     assert.ok(gone(r), 'a process of the connect is still running');
   } finally { reap(r); }
@@ -1894,7 +1895,7 @@ test('S18 stopped: a search says Stopped. alone; a connect adds that some notes 
   const at = (kind: string, door = false, width = 80) => cfg.render({ kind, data: {}, stopped: true } as any, { ...OPTS, width, door });
   for (const kind of ['ask', 'check', 'status']) assert.equal(at(kind), 'Stopped.');
   assert.equal(at('connect'), 'Stopped. Some notes may be connected; drag the folder in again to finish.');
-  assert.equal(flat(at('connect', true)), 'Stopped. Some notes may be connected; open the window (npm run clef, or superclef with no words), then drag the folder in again to finish.');
+  assert.equal(flat(at('connect', true)), 'Stopped. Some notes may be connected; run superclef connect <folder> again to finish.');
   assert.ok(lines(at('connect', true, 60)).every((l) => l.length <= 60), at('connect', true, 60));
 });
 
@@ -2602,7 +2603,7 @@ test('I2g the door keeps its Next line for a stale folder: it never offers a fix
   const r = rig([{ when: '--json -- ', out: STALE(false), code: 4 }]);
   const d = await door(r, ['canary?']);
   assert.equal(d.code, 4);
-  assert.match(flat(d.out), /Next: .*drag the folder in again to refresh it/);
+  assert.match(flat(d.out), /Next: run superclef connect <folder> again to refresh it/);
 });
 
 test('I2h fixOf names the one fix: key for a rejected file key, refresh for stale sets nobody is healing, nothing else', () => {

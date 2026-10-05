@@ -198,7 +198,7 @@ export function launchLine(version: string, sets: { state: string }[], width: nu
 const LEFT: Record<string, (n: number) => string> = {
   link: (n) => `${plural(n, 'linked note')} pointing outside this folder`,
   name: (n) => `${plural(n, 'note')} with backup or key-style names; they are never connected`,
-  folder: (n) => `${plural(n, 'note')} in folders skipped by default; drag a folder in on its own to connect it`,
+  folder: (n) => `${plural(n, 'note')} in folders skipped by default; connect that folder on its own to include it`,
   folder_other: (n) => `${plural(n, 'file')} of other types in folders skipped by default`,
   hidden: (n) => `${plural(n, 'hidden note')}; rename one to connect it`,
   dataset: (n) => `${plural(n, 'file')} in prepared dataset copies`,
@@ -230,7 +230,7 @@ export function render(shown: Shown, look: Look): string {
   const body = (s: string | string[]) => out.push(...lay(s));
   const next = (s: string) => { nextLine = s; };
   // A step that is a drag: at the one-shot door there is no window yet, so the way in comes first.
-  const drag = (s: string) => next(look.door ? `${OPEN}, then ${s}` : s);
+  const drag = (s: string, door = '') => next(look.door ? (door || `${OPEN}, then ${s}`) : s);
   const quote = (text: string) => out.push(...lay(`"${text}"`, 'dim', '    ', '    '));
   const place = (f: { path: string; line?: number; date?: string; says?: string }, lead = '') =>
     [lead + path(f.path) + (f.line ? ':' + f.line : ''), ...(f.date ? [`· ${f.date}`] : []), ...(f.says ? [`· says ${f.says}`] : [])];
@@ -251,7 +251,7 @@ export function render(shown: Shown, look: Look): string {
     : `Left out ${r.count} ${r.what}${r.way_in ? `; ${r.way_in}` : ''}.`)).forEach((l) => body(l));
   const empty = (setup: boolean) => {
     head(setup ? 'Not set up yet' : 'Nothing connected yet');
-    if (setup) next(`${OPEN}; setup runs there.`); else drag('drag a folder of Markdown notes in here.');
+    if (setup) next(`${OPEN}; setup runs there.`); else drag('drag a folder of Markdown notes in here.', 'run: superclef connect <folder> (a folder of Markdown notes).');
   };
   const retry = () => { if (!shown.noNext && shown.kind !== 'status') next('/status, or ask again.'); };
   const crash = (why: string) => { head('Super Clef hit an error', 'red'); if (why) body(why); retry(); };
@@ -265,7 +265,7 @@ export function render(shown: Shown, look: Look): string {
   if (d.judge_down) body(`Judge unreachable (${d.judge ?? 'judge'}${look.judgeHost ? ` on ${look.judgeHost.replace(/^.*@/, '')}` : ''}): results below are word-search order, unconfirmed.`);
   if (shown.kind === 'help') return HELP;
   if (shown.stopped) { // Esc or Ctrl+C while a helper ran: a connect may have written some of its notes
-    const finish = shown.kind === 'connect' ? ` Some notes may be connected; ${look.door ? OPEN + ', then ' : ''}drag the folder in again to finish.` : '';
+    const finish = shown.kind === 'connect' ? ` Some notes may be connected; ${look.door ? 'run superclef connect <folder>' : 'drag the folder in'} again to finish.` : '';
     return pack(prose('Stopped.' + finish), look.width, '', '').join('\n');
   }
   if (shown.kind === 'crash') crash(d.line ?? '');
@@ -275,7 +275,7 @@ export function render(shown: Shown, look: Look): string {
     else if (d.refused) {
       head(none, 'red');
       body(REFUSED[d.refused.kind]?.(d.refused) ?? d.refused.why ?? '');
-      if (d.refused.kind === 'too_many') drag('drag in a smaller folder inside it.');
+      if (d.refused.kind === 'too_many') drag('drag in a smaller folder inside it.', 'run superclef connect <a smaller folder inside it>.');
     } else {
       head(d.connected ? `${word} ${shown.label}: ${plural(d.connected, 'note')}` : none, d.connected ? 'green' : 'red');
       said(d.held, (n) => `Held back ${plural(n, 'note')}:`);
@@ -305,16 +305,16 @@ export function render(shown: Shown, look: Look): string {
     else crash(d.why ?? '');
   } else if (o === 'needs-setup') {
     if (d.next === 'connect' || d.next === 'setup') empty(d.next === 'setup');
-    else if (d.next === 'refresh' && (rows.some((u) => u.state === 'unprepared') || /import-state/.test(d.cmd ?? ''))) {
+    else if (d.next === 'refresh' && rows.some((u) => u.state === 'unprepared')) {
       head('Not set up yet');
-      body('run: superclef import-state --from-superjev (or connect a folder)');
+      body('run: superclef connect <folder> (a folder of Markdown notes)');
     } else {
       head('Not sure yet');
       for (const u of rows) body(`${u.root ? basename(u.root) : u.set} ${u.healing ? 'changed; it is refreshing now. Ask again in a moment.' : 'was not refreshed, so it was not searched.'}`);
       leftOut(d.left_out);
       if (!rows.length && !(d.left_out ?? []).length && d.why) body(d.why);
       if (d.next === 'include') next('use the way in above, then ask again.');
-      else if (rows.some((u) => !u.healing)) drag('drag the folder in again to refresh it.');
+      else if (rows.some((u) => !u.healing)) drag('drag the folder in again to refresh it.', 'run superclef connect <folder> again to refresh it.');
     }
   } else if (o === 'not-supported') {
     head('Not answered'); body(d.why ?? '');
@@ -356,7 +356,7 @@ export function render(shown: Shown, look: Look): string {
     if (d.searched) body(`Searched ${plural(d.searched.sets, 'folder')} (${plural(d.searched.notes, 'note')}); nothing matched.`);
     body("That doesn't prove it's nowhere: it may be in a folder you haven't connected.");
     leftOut(d.left_out);
-    drag('drag in the folder that has it.');
+    drag('drag in the folder that has it.', 'run superclef connect <folder that has it>.');
   } else crash(d.why ?? '');
   if (d.skills_off && shown.kind !== 'status') body(sentence(d.skills_off).replace(/^./, (c) => c.toUpperCase()));
   const time = shown.secs === undefined ? [] : [paint('dim', `· ${shown.secs.toFixed(1)}s`)];
