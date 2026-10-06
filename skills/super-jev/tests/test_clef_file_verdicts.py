@@ -77,7 +77,7 @@ def _run(tmp_path, monkeypatch, capsys, reply):
 
 
 def test_the_profile_carries_both_bars():
-    assert (CLEF.file_yes_bar, CLEF.none_file_bar) == (0.5, 0.2)
+    assert (CLEF.file_yes_bar, CLEF.none_file_bar) == (0.5, 0.05)
     jev = judge_profile.load("typesafe-jev")
     assert (jev.file_yes_bar, jev.none_file_bar) == (0.0, 0.0)
 
@@ -90,7 +90,7 @@ def test_one_call_carries_a_verdict_per_file(tmp_path, monkeypatch, capsys):
 
 
 def test_all_no_and_a_none_under_the_bar_is_a_clean_not_found(tmp_path, monkeypatch, capsys):
-    reply = _reply("none", {"file_1": 0.1, "file_2": 0.1, "file_3": 0.1, "none": 0.7}, [0.05, 0.1, 0.02])
+    reply = _reply("none", {"file_1": 0.1, "file_2": 0.1, "file_3": 0.1, "none": 0.7}, [0.03, 0.04, 0.02])
     top, out, _, _ = _run(tmp_path, monkeypatch, capsys, reply)
     assert top == [], "no leads listed"
     assert out.startswith("OUTCOME: no") and "leans none" not in out

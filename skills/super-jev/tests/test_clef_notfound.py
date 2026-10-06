@@ -120,11 +120,11 @@ def test_a_strong_none_wins_over_yes_verdicts(tmp_path, monkeypatch, capsys):
 
 
 def test_a_weak_none_with_every_file_no_is_a_clean_not_found(tmp_path, monkeypatch, capsys):
-    top, out = _run(tmp_path, monkeypatch, capsys, _reply("none", 0.57, yes=(0.05, 0.1, 0.19)))
+    top, out = _run(tmp_path, monkeypatch, capsys, _reply("none", 0.57, yes=(0.01, 0.03, 0.049)))
     assert top == [] and "leans none" not in out
     assert ask._CLEF["strong_none"] is True
 
 
 def test_a_weak_none_with_a_file_at_the_bar_keeps_the_leads(tmp_path, monkeypatch, capsys):
-    top, out = _run(tmp_path, monkeypatch, capsys, _reply("none", 0.57, yes=(0.05, 0.2, 0.1)))
+    top, out = _run(tmp_path, monkeypatch, capsys, _reply("none", 0.57, yes=(0.01, 0.05, 0.02)))
     assert len(top) == 3 and "leans none of these" in out

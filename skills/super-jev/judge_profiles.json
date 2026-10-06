@@ -39,7 +39,7 @@
    "calibrated": false,
    "none_bar": 0.9,
    "file_yes_bar": 0.5,
-   "none_file_bar": 0.2,
+   "none_file_bar": 0.05,
    "vendor": "your clef machine",
    "judge_name": "Clef"
   },
