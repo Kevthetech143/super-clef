@@ -110,3 +110,43 @@ def test_with_the_bar_off_a_strong_none_still_keeps_the_leads(tmp_path, monkeypa
 def test_a_failed_call_is_never_a_not_found(tmp_path, monkeypatch, capsys):
     top, _ = _run(tmp_path, monkeypatch, capsys, {"answers": {}})  # no pick in the reply
     assert ask._CLEF["strong_none"] is False
+
+
+def test_files_the_judge_did_not_pick_rank_in_package_order_before_read_list_only_files(tmp_path, monkeypatch, capsys):
+    # Read-list order is f1..f8; the question words put f6, f7, f5, f2 (best first) in the judge's package of four.
+    # The judge picks the wrong file (file_2 = f7): the other package files must come right after it, ahead of f1.
+    texts = {"f1": "gardening basics", "f2": "orchid", "f3": "pots and bark", "f4": "moss supplies",
+             "f5": "orchid greenhouse", "f6": "orchid greenhouse gate code", "f7": "orchid greenhouse gate",
+             "f8": "shed key"}
+    paths = []
+    for name, text in texts.items():
+        p = tmp_path / f"{name}.md"
+        p.write_text(text)
+        paths.append(str(p))
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "p1.json").write_text("{}")
+    monkeypatch.setattr(ask.prepare_bulk, "CACHE_DIR", cache)
+    monkeypatch.setattr(ask, "CLEF", True)
+    monkeypatch.setattr(judges, "profile", lambda: CLEF)
+    ask._CLEF.update(low_trust=set(), leans_none=False, strong_none=False, shown=[])
+    ask._STAGE.clear()
+    monkeypatch.setattr(ask, "load_cache_files", lambda ptr: {})
+    monkeypatch.setattr(ask, "word_search", lambda *a, **k: [])
+    monkeypatch.setattr(ask, "candidate_files", lambda *a, **k: [
+        ("p1", p, {"sha256": ask.sha256_file(Path(p))}) for p in paths])
+    monkeypatch.setattr(ask.toc_search, "run", lambda *a, **k: (list(paths), [], {}))
+    monkeypatch.setattr(ask, "memory", lambda r: {"status": "miss"} if r["action"] == "cached" else
+                        {"pointers": ["p1"]} if r["action"] == "panel" else {"status": "candidates", "candidates": []})
+    monkeypatch.setattr(judges, "ask", lambda s, q, timeout=0: _reply("file_2", 0.5))
+    sdir = tmp_path / "state"
+    sdir.mkdir()
+    ask.lookup(Q, "me", sdir)
+    capsys.readouterr()
+    top = []
+    for line in reversed((sdir / "lookups.jsonl").read_text().splitlines()):
+        rec = json.loads(line)
+        if rec.get("kind") == "lookup" and rec.get("question") == Q:
+            top = [Path(t["path"]).stem for t in rec.get("top", [])]
+            break
+    assert top[:4] == ["f7", "f6", "f5", "f2"], top

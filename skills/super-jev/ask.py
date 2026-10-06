@@ -871,7 +871,7 @@ CLEF_NOTE = "  (not confirmed: on topic, but clef did not pick this file; read i
 CLEF_CLAIM_NOTE = "(Clef is the judge: treat this as a lead; open the proof file to confirm.)"
 CLEF_VIEW_WHAT = "not searched by Super Clef: a reviewed view of de-identified copies, which needs Super Jev's provider"
 CLEF_VIEW_FIX = "ask Super Jev for these files"
-_CLEF = {"low_trust": set(), "leans_none": False, "strong_none": False}
+_CLEF = {"low_trust": set(), "leans_none": False, "strong_none": False, "shown": []}
 # Word search: on every lookup the
 # principal's reviewed files (prepare-cache entries whose sha256 still matches) are
 # searched locally for the question's words (typo-tolerant), and the best
@@ -2727,6 +2727,7 @@ def clef_confirm(question: str, paths: list):
         return {}, set(), None, notes  # a claim is judged by judge_listwise's verdicts, over its own short package
     # Free local rerank first: the files whose best 120-token stretch holds the most question words go in the package.
     shown = sorted((p for p in paths if p in passages), key=lambda p: -window_hits[p])[:CLEF_PACKAGE_FILES]
+    _CLEF["shown"] = shown
     for p in paths:
         notes.setdefault(p, INCONCLUSIVE)
     if not shown:
@@ -3128,7 +3129,7 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
     t0 = time.time()
     lookup_id = new_lookup_id(principal, question, t0)
     _STAGE.clear()
-    _CLEF.update(low_trust=set(), leans_none=False, strong_none=False)
+    _CLEF.update(low_trust=set(), leans_none=False, strong_none=False, shown=[])
     # SUPERJEV_REPLAY=1 (paid_replay.py): answer live; never read a saved answer or claim verdict.
     replay = os.environ.get("SUPERJEV_REPLAY") == "1"
     panel = None
@@ -3660,7 +3661,7 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
         if CLEF:
             # Clef ranks one file at most: the files it did not pick keep the read list's order (word search's best
             # hits, then the TOC pick's), not path order; a dead judge ranks nothing, so all of them keep it.
-            order = {p: i for i, p in enumerate(to_check)}
+            order = {p: i for i, p in enumerate(list(dict.fromkeys(_CLEF["shown"] + to_check)))}
             merged.sort(key=lambda m: (not check_error and notes.get(m[1]) != INCONCLUSIVE, -order.get(m[1], len(order))),
                         reverse=True)
         if CLEF:
