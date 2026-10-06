@@ -2069,6 +2069,8 @@ def edited_held(pointers: list, exclude=(), reads=None) -> dict:
 INDEX_FILE = "index.sqlite"
 INDEX_STAMP = "index-sync.stamp"
 INDEX_LOCK = "index-update.lock"
+INDEX_FAIL_STAMP = "index-fail.stamp"  # touched when an updater pass raises; a success removes it
+INDEX_FAIL_COOLDOWN_SECS = 120  # while it is younger, a generation mismatch does not skip the spawn throttle (a failing pass would repeat)
 INDEX_WALK_STAMP = "index-walk.stamp"  # the last root walk; the updater walks the roots at most once per auto_heal.SCAN_SECS
 INDEX_PENDING = "index-update.pending"  # touched by an updater that lost the lock
 INDEX_MAX_AGE_SECS = 24 * 3600   # an index not synced for a day is stale: today's path runs
@@ -2253,9 +2255,16 @@ def spawn_index_updater(principal: str) -> None:
     except Exception:  # noqa: BLE001
         pass
 
+def index_failed_lately(sdir: Path) -> bool:
+    try:
+        return time.time() - (sdir / INDEX_FAIL_STAMP).stat().st_mtime < INDEX_FAIL_COOLDOWN_SECS
+    except OSError:
+        return False
+
 def index_after_ask(principal: str, sdir: Path) -> None:
     """After an ask run with the flag on: start the updater if a served file mismatched, the index was unusable,
-    or the last start is older than INDEX_SPAWN_EVERY_SECS. One stamp file throttles it (a mismatch skips the wait)."""
+    or the last start is older than INDEX_SPAWN_EVERY_SECS. One stamp file throttles it (a served-file mismatch or a
+    pointer the index holds at an older generation skips the wait: a refresh just made it, and every ask is slow until re-seeded)."""
     st = _STAGE.get("index")
     if not st:
         return
@@ -2264,7 +2273,8 @@ def index_after_ask(principal: str, sdir: Path) -> None:
         age = time.time() - stamp.stat().st_mtime
     except OSError:
         age = None
-    if age is not None and age < INDEX_SPAWN_EVERY_SECS and not st.get("mismatch"):
+    gen_bypass = _STAGE.get("index_gen_mismatch") and not index_failed_lately(sdir)
+    if age is not None and age < INDEX_SPAWN_EVERY_SECS and not st.get("mismatch") and not gen_bypass:
         return
     try:
         sdir.mkdir(parents=True, exist_ok=True)
@@ -2396,13 +2406,28 @@ def index_sync(principal: str, sdir: Path) -> int:
                 lock.close()
                 return 0
     try:
-        while True:
-            pending.unlink(missing_ok=True)  # a kick that lands from here on makes one more pass
-            rc = _index_sync(principal, sdir)
-            if rc or not pending.exists():
-                return rc
+        pending.unlink(missing_ok=True)  # this pass reads the registry now, so it covers anything queued before it
+        rc = _checked_pass(principal, sdir)
+        if rc == 0 and pending.exists():  # queued while this pass ran: one more, never a loop
+            pending.unlink(missing_ok=True)
+            rc = _checked_pass(principal, sdir)
+        return rc
     finally:
         lock.close()  # closing the file releases the lock
+
+def _checked_pass(principal: str, sdir: Path) -> int:
+    """One pass; a pass that raises leaves index-fail.stamp (the generation-mismatch bypass backs off), a success clears it."""
+    try:
+        rc = _index_sync(principal, sdir)
+    except Exception:
+        try:
+            (sdir / INDEX_FAIL_STAMP).touch()
+        except OSError:
+            pass
+        raise
+    if rc == 0:
+        (sdir / INDEX_FAIL_STAMP).unlink(missing_ok=True)
+    return rc
 
 def _index_sync(principal: str, sdir: Path) -> int:
     from file_index import FileIndex
@@ -2444,7 +2469,8 @@ def _index_sync(principal: str, sdir: Path) -> int:
             roots = reports[ptr].get("roots")
             walk = walk_due or idx.generation_of(ptr) is None  # a pointer new to the index (or just purged) is always walked
             walked = walked or walk
-            hashed += idx.update(ptr, entries=entries, roots=roots, excludes=reports[ptr].get("excludes"), walk=walk)["hashed"]
+            hashed += idx.update(ptr, entries=entries, roots=roots, excludes=reports[ptr].get("excludes"), walk=walk,
+                               allow_targets=reports[ptr].get("allowTargets"))["hashed"]
         if walked:
             try:
                 wstamp.touch()
@@ -2490,7 +2516,7 @@ WORD_INDEX_FILE = "word-index.json"
 # The stamp covers everything that decides a stored token: tokenizer version and pattern, stopwords
 # (they shape the pair keys), passage size. Any change makes old entries invalid.
 def _word_index_version() -> str:
-    return "{}.1.{}.{}".format(WORDS_VERSION, CONFIRM_CHUNK, hashlib.sha256(
+    return "{}.2.{}.{}".format(WORDS_VERSION, CONFIRM_CHUNK, hashlib.sha256(
         json.dumps([WORD_RE.pattern, sorted(QUERY_STOPWORDS)]).encode()).hexdigest()[:12])
 
 WORD_INDEX_VERSION = _word_index_version()
@@ -2531,7 +2557,8 @@ def _index_item(text: str, sha: str, pairs: bool = True) -> dict:
     whole = Counter()
     for p in parts:
         whole.update(p[0])
-    return {"sha": sha, "heading": heading, "whole": dict(whole), "passages": parts}
+    # secret: the text scans as holding one (worked out once per sha). Such a file is searched by neither path.
+    return {"sha": sha, "heading": heading, "whole": dict(whole), "passages": parts, "secret": has_secret(text)}
 
 def _valid_item(item, sha) -> bool:
     return (isinstance(item, dict) and item.get("sha") == sha and isinstance(item.get("heading"), str)
@@ -2551,7 +2578,7 @@ def term_variants(terms: list, vocab) -> dict:
     return out
 
 def word_search(question: str, pointers: list, limit: int = FALLBACK_FILES, skip=(), extra=(), held_cover=None,
-                reads=None, index_path=None, candidates=None, items=None, fts=None, read_paths=()) -> list:
+                reads=None, index_path=None, candidates=None, items=None, fts=None, read_paths=(), held=None) -> list:
     """Local, no provider calls: [(score, path, pointer)] of the principal's reviewed
     files best matching the question's words (BM25 per CONFIRM_CHUNK passage, a file
     scores its best passage; a file's path, description and stored question count triple
@@ -2563,7 +2590,9 @@ def word_search(question: str, pointers: list, limit: int = FALLBACK_FILES, skip
     the same secret scan and size ceiling connect applies; it is listed in the trace.
     `extra` names edited files a refresh would hold. They never enter the ranking; in the same pass their word
     coverage of the question (the share of the question's weighted words they contain, the test every file
-    must pass to be offered) is recorded in `held_cover`, locally, nothing sent."""
+    must pass to be offered) is recorded in `held_cover`, locally, nothing sent.
+    A file that still matches its review but whose text scans as a secret (the word item's flag, or `extra` for the
+    index's held rows) is never ranked either: it is appended to `held` and its coverage recorded the same way."""
     terms = query_terms(question)
     if not terms:
         return []
@@ -2588,6 +2617,11 @@ def word_search(question: str, pointers: list, limit: int = FALLBACK_FILES, skip
                 continue
             raw, sha = got
             text = None
+            if sha == entry.get("sha256") and path in extra:
+                aside[path] = raw.decode("utf-8", "replace")  # the index's held row: flagged by the updater, once per sha
+                if held is not None:
+                    held.append(path)
+                continue
             if sha != entry.get("sha256"):
                 text = raw.decode("utf-8", "replace")
                 # Edited since connect: the refresh (auto-heal) re-gates it soon. Until then
@@ -2607,6 +2641,11 @@ def word_search(question: str, pointers: list, limit: int = FALLBACK_FILES, skip
                 if index_path:
                     index[path] = item
                     dirty = True
+            if item.get("secret") and sha == entry.get("sha256"):  # reviewed bytes the secret scan now holds
+                aside[path] = text if text is not None else raw.decode("utf-8", "replace")
+                if held is not None:
+                    held.append(path)
+                continue
         head = " ".join([path.replace("/", " ").replace("-", " ").replace("_", " "), item["heading"],
                          str(entry.get("description") or ""), str(entry.get("question") or "")])
         head_words = Counter(w for w in words(head) for _ in range(3))
@@ -3224,6 +3263,7 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
         _STAGE["index"] = {"on": True, "used": idx_read is not None, **({"fallback": why} if why else {})}
         if index_fb:  # some pointers are served by today's path, in this same ask
             _STAGE["index"]["fallback"] = {"pointers": [f"{n}: {r}" for n, r in list(index_fb.items())[:STAGE_LIST_CAP]]}
+            _STAGE["index_gen_mismatch"] = any(r.startswith("generation mismatch") for r in index_fb.values())
         panel = ipanel
     panel = panel if panel is not None else memory({"action": "panel", "principal": principal})
     view_pointers = {row["pointer"] for row in panel.get("pointers", [])
@@ -3575,6 +3615,7 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
     reads = {}  # one read+sha pass shared by edited_held and word_search
     use_stat_memo(principal)  # ...and a stat-keyed memo across asks: an unchanged file is not re-read
     icands, fitems, ftocs, fts_nums, fb_paths, vouched = None, None, None, None, set(), set()
+    held_ix = []  # the index's held rows (reviewed bytes the secret scan now holds) of the sets it serves
     if idx_read:
         try:
             # Index read path: candidates come from the index rows; no file is read or hashed here. Edited files
@@ -3593,6 +3634,7 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
                 out_of_scope = {p for _ptr, p, _e in icands if other_person(p)}
                 icands = index_candidates(idx_read, ix_ptrs, out_of_scope)
             edited = {"secret": [], "stuck": [], "refresh": []}
+            held_ix = [c for c in idx_read.held_candidates(ix_ptrs) if not other_person(c[1])]
             if fb_ptrs:
                 # Pointers the index does not hold completely and currently: today's path, here, for each of them. Their
                 # files are read and sha-checked as today (word search and TOC corpus), not vouched for by the index.
@@ -3623,17 +3665,22 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
         except sqlite3.Error as e:  # locked by the updater, damaged: today's path answers this ask
             idx_read, index_fb = index_failed(idx_read, e), {}
             icands = fitems = ftocs = fts_nums = None
-            fb_paths, vouched = set(), set()
+            fb_paths, vouched, held_ix = set(), set(), []
     if not idx_read:
         out_of_scope = {p for ptr in search_pointers for p in load_cache_files(ptr) if other_person(p)}
         edited = edited_held(search_pointers, out_of_scope, reads)  # once per searched set, not per search path
     held_cover = {}  # a held file's word coverage of the question, from the same word-search pass
+    held_found = []  # reviewed, unchanged files whose text scans as a secret: searched by neither path, named as held
+    held_paths = {c[1] for c in held_ix}
     toc_on = not _CLAIM["text"]
     found = word_search(question, search_pointers, skip=(out_of_scope if toc_on else set(routed[:CONFIRM_FILES]) | out_of_scope),
                         reads=reads, index_path=None if fts_nums else sdir / WORD_INDEX_FILE,
-                        **({"candidates": icands, "read_paths": fb_paths - vouched} if idx_read else {}),
+                        **({"candidates": (icands or []) + held_ix, "read_paths": (fb_paths - vouched) | held_paths}
+                           if idx_read else {}),
                         **({"items": fitems, "fts": fts_nums} if fts_nums else {}),
-                        **({"extra": set(edited["secret"]), "held_cover": held_cover} if edited["secret"] else {}))
+                        extra=set(edited["secret"]) | held_paths, held_cover=held_cover, held=held_found)
+    edited["secret"] = list(dict.fromkeys(edited["secret"] + held_found))
+    held_paths |= set(held_found)
     wpaths = {p: ptr for _, p, ptr in found}
     to_check = routed[:CONFIRM_FILES] + list(wpaths)
     if toc_on:
@@ -3641,8 +3688,8 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
         # Jev's pick of files from their TOC pages, then the parts of those files. The word search's
         # own hits ride along at every step. If it fails, the word search's list is read and the
         # failure is named in the trace.
-        corpus = toc_corpus(icands if idx_read else candidate_files(search_pointers, out_of_scope), reads,
-                            fb_paths if idx_read else None)
+        corpus = toc_corpus([c for c in (icands if idx_read else candidate_files(search_pointers, out_of_scope))
+                             if c[1] not in held_paths], reads, fb_paths if idx_read else None)
         flush_stat_memo()
         tt0 = time.time()
         try:
@@ -4952,19 +4999,23 @@ def _connected_files(principal: str, pointer: str) -> tuple:
     return files, exts, True
 
 
-def _folder_files(root: Path) -> dict:
+def _folder_files(root: Path, allow=()) -> dict:
     """{real path: presented names} for every file under root, walking into symlinked folders like
     prepare_bulk.walk_md (os.walk followlinks, each real folder once so a link loop ends); hidden and
     generated dirs skipped. The suffix is judged on the presented name (alias.md -> target.txt is a .md
     source, as inventory treats it); identity is the real path, so two routes to one file count once."""
     out, walked = {}, set()
+    inside = prepare_bulk._stat_bases([root, *allow, os.path.expanduser("~")])
     for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
         real = os.path.realpath(dirpath)
         if real in walked:
             dirnames[:] = []
             continue
         walked.add(real)
-        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in PREFLIGHT_SKIP_DIRS]
+        # a folder link leaving the folder and home is not walked, as prepare_bulk.walk_md does
+        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in PREFLIGHT_SKIP_DIRS
+                       and (not os.path.islink(os.path.join(dirpath, d))
+                            or prepare_bulk._within(os.path.realpath(os.path.join(dirpath, d)), inside))]
         for n in filenames:
             f = os.path.join(dirpath, n)
             if not n.startswith(".") and os.path.isfile(f):
@@ -4976,7 +5027,12 @@ def _folder_coverage(folder: Path, principal: str, ready: list) -> dict:
     """How many of the folder's connectable files a ready pointer of this principal has registered.
     Connectable = the default suffixes plus any a pointer registered here opted into (name endswith,
     so compound suffixes like .schema.json match)."""
-    names = _folder_files(folder.expanduser())
+    allow = []   # the folders the ready pointers were connected with --allow-target, so coverage follows the links connect followed
+    for name in ready:
+        rep = auto_heal._report_for(name, prepare_bulk.CACHE_DIR)[0]
+        if isinstance(rep, dict):
+            allow += [t for t in rep.get("allowTargets") or [] if isinstance(t, str)]
+    names = _folder_files(folder.expanduser(), allow)
     on_disk = set(names)
     exts, connected, unread = set(getattr(prepare_bulk, "CONNECTABLE_EXTENSIONS", (".md",))), set(), []
     for name in ready:

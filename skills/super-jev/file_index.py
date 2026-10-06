@@ -173,7 +173,7 @@ class FileIndex:
     def close(self):
         self.db.close()
 
-    def _walk(self, roots, excludes=()):
+    def _walk(self, roots, excludes=(), allow=()):
         """New-file discovery by stat only, with the same guards connect's inventory() applies (credential
         suffix, logins / -secret / .bak names, vault and hidden folders, hidden files, links leaving the root,
         extension, size ceiling). No file body is opened."""
@@ -181,11 +181,11 @@ class FileIndex:
         ex = tuple(e.strip("/") for e in excludes or [] if e.strip("/"))  # as connect reads them
         for root in roots or []:
             if self._walked is None:  # no round open: walk fresh every time
-                yield from self._walk_one(Path(root), pb, ex)
+                yield from self._walk_one(Path(root), pb, ex, allow)
                 continue
-            key = (str(root), ex)
+            key = (str(root), ex, allow)
             if key not in self._walked:
-                self._walked[key] = list(self._walk_one(Path(root), pb, ex))
+                self._walked[key] = list(self._walk_one(Path(root), pb, ex, allow))
             yield from self._walked[key]
 
     def begin_round(self, roots=()):
@@ -195,24 +195,24 @@ class FileIndex:
         self._raw = {}
         self._round_roots = sorted({str(Path(r)) for r in roots}, key=len)
 
-    def _raw_walk(self, root, pb, excludes=()):
+    def _raw_walk(self, root, pb, excludes=(), allow=()):
         """(files, links, link_dirs) of pb.walk_md(root). In a round, a root inside an outer root of the round is cut out of
         that root's walk: the same files and links, unless a folder inside it was skipped there as already walked
         (a link loop or a second path to one folder), when it is walked on its own."""
-        key = (str(root), tuple(excludes))
+        key = (str(root), tuple(excludes), allow)
         rk = key[0]
         if self._raw is None:
             tr = {}
-            files, linked = pb.walk_md(root, trace=tr, excludes=list(excludes))
+            files, linked = pb.walk_md(root, trace=tr, excludes=list(excludes), allow=list(allow))
             return files, linked, tr.get("link_dirs", [])
         if key in self._raw:
             return self._raw[key]
         for outer in () if excludes else self._round_roots:  # (a root with excludes is walked on its own)
             if outer == rk:
                 break
-            if rk.startswith(outer.rstrip(os.sep) + os.sep):
-                of, ol, od = self._raw_walk(Path(outer), pb)
-                if not any(d == rk or d.startswith(rk + os.sep) for d in self._raw_dups[(outer, ())]):
+            if rk.startswith(outer.rstrip(os.sep) + os.sep) and os.path.realpath(rk).startswith(os.path.realpath(outer).rstrip(os.sep) + os.sep):
+                of, ol, od = self._raw_walk(Path(outer), pb, (), allow)
+                if not any(d == rk or d.startswith(rk + os.sep) for d in self._raw_dups[(outer, (), allow)]):
                     pre = rk + os.sep
                     got = ([f for f in of if str(f).startswith(pre)],
                            [t for t, d in zip(ol, od) if d == rk or d.startswith(pre)],
@@ -221,13 +221,13 @@ class FileIndex:
                     self._raw_dups[key] = []
                     return got
         tr = {}
-        files, linked = pb.walk_md(root, trace=tr, excludes=list(excludes))
+        files, linked = pb.walk_md(root, trace=tr, excludes=list(excludes), allow=list(allow))
         self._raw_dups[key] = tr.get("dups", [])
         self._raw[key] = (files, linked, tr.get("link_dirs", []))
         return self._raw[key]
 
-    def _walk_one(self, root, pb, excludes=()):
-        files, linked, _dirs = self._raw_walk(root, pb, excludes)
+    def _walk_one(self, root, pb, excludes=(), allow=()):
+        files, linked, _dirs = self._raw_walk(root, pb, excludes, allow)
         base = os.path.realpath(root)
         # every folder a file may sit under: the root's real path, then each link target outside the skipped folders. The
         # first of them (in this order) that holds a file is its base; one parents walk per FOLDER finds it, not one test per link.
@@ -288,7 +288,7 @@ class FileIndex:
         for t in ("files", "toc", "seen"):
             self.db.execute(f"DELETE FROM {t} WHERE path=?", (path,))
 
-    def update(self, pointer: str, entries: dict = None, roots=None, excludes=None, walk: bool = True) -> dict:
+    def update(self, pointer: str, entries: dict = None, roots=None, excludes=None, walk: bool = True, allow_targets=None) -> dict:
         """Stat-diff a pointer's files; read and sha ONLY files whose stat changed (or never seen).
         `entries` is the reviewed prepare-cache of the pointer (path -> record); default: load it from the
         prepare-cache. `roots` are the connected folders, walked by stat only to find new files (never into `excludes`, the pointer's recorded --exclude list); `walk=False` skips that walk (the cache's own files and the known rows are still checked).
@@ -297,10 +297,15 @@ class FileIndex:
             from prepare_bulk import load_cache_files
             entries = load_cache_files(pointer)
         known = {r[0]: r[1:] for r in self.db.execute("SELECT path,size,mtime_ns,reviewed_sha FROM files WHERE pointer=?", (pointer,))}
+        indexed = set(known)
+        tocs = {r[0]: r[1:] for r in self.db.execute(
+            "SELECT f.path,f.sha256,t.json FROM files f LEFT JOIN toc t ON t.path=f.path WHERE f.pointer=?", (pointer,))}
         known.update({r[0]: r[1:] for r in self.db.execute("SELECT path,size,mtime_ns,reviewed_sha FROM seen WHERE pointer=?", (pointer,))})
         # unreviewed files the walk found: neither search path serves one (it is in no prepare-cache), so its comings,
         # goings and edits never make the pointer stale
         unreviewed = {r[0] for r in self.db.execute("SELECT path FROM seen WHERE pointer=? AND reason='new'", (pointer,))}
+        # held files (reviewed, unchanged, secret-shaped text): neither search path serves one either
+        unreviewed |= {r[0] for r in self.db.execute("SELECT path FROM seen WHERE pointer=? AND reason='held'", (pointer,))}
         out = {"hashed": 0, "changed": [], "new": [], "gone": [], "stale": False}
         real = []  # changes to files the pointer reviewed: these are what a stale pointer waits on
         row = self.db.execute("SELECT roots FROM pointers WHERE pointer=?", (pointer,)).fetchone()
@@ -315,7 +320,7 @@ class FileIndex:
                 del known[p]
         paths = set(entries) | set(known)
         if walk:
-            paths |= {p for p in self._walk(roots, excludes)}
+            paths |= {p for p in self._walk(roots, excludes, tuple(str(a) for a in allow_targets or ()))}
         for p in sorted(paths):
             ent = entries.get(p)
             try:
@@ -354,6 +359,11 @@ class FileIndex:
             # unchanged stat AND the same review as when it was last judged: nothing to do. A changed or
             # newly appeared review (promotion) re-evaluates, so a seen file can become indexed.
             if p in known and known[p] == (st.st_size, st.st_mtime_ns, reviewed):
+                # same bytes, same review: only its labels may have been re-gated (a refresh that changes no file
+                # keeps the generation, so no purge re-seeds them)
+                toc = json.dumps({k: ent.get(k) for k in ("description", "question", "kind", "status", "as_of", "subject")})
+                if p in tocs and tocs[p][1] != toc:
+                    self.db.execute("INSERT OR REPLACE INTO toc VALUES(?,?,?)", (p, tocs[p][0], toc))
                 continue
             if p not in known and self._held_unchanged(p, pointer, st, reviewed):
                 continue  # another pointer holds this very file as it stands: pointers sharing files do not re-read each other's
@@ -371,7 +381,9 @@ class FileIndex:
             if reason:
                 self.db.execute("INSERT INTO seen VALUES(?,?,?,?,?,?,?)",
                                 (p, pointer, st.st_size, st.st_mtime_ns, sha, reason, reviewed))
-                out["changed"].append(p); real.append(p)
+                out["changed"].append(p)
+                if reason == "edited" or p in indexed:
+                    real.append(p)  # a held file is served by neither search path: only leaving `files` is a change
             else:
                 self.db.execute("INSERT INTO files VALUES(?,?,?,?,?,1,?)", (p, pointer, st.st_size, st.st_mtime_ns, sha, reviewed))
                 toc = {k: ent.get(k) for k in ("description", "question", "kind", "status", "as_of", "subject")}
@@ -383,8 +395,8 @@ class FileIndex:
         prev = (self.db.execute("SELECT stale FROM pointers WHERE pointer=?", (pointer,)).fetchone() or (0,))[0]
         stale = 2 if prev == 2 else 1 if out["stale"] else prev  # 2 (a read-side mismatch) is cleared by a refresh only
         if stale == 1 and not out["stale"] and not self.db.execute(
-                "SELECT 1 FROM seen WHERE pointer=? AND reason IN ('edited','held') LIMIT 1", (pointer,)).fetchone():
-            stale = 0  # a pass with no change and no edited or held file left: the index serves the pointer as it stands
+                "SELECT 1 FROM seen WHERE pointer=? AND reason='edited' LIMIT 1", (pointer,)).fetchone():
+            stale = 0  # a pass with no change and no edited file left: the index serves the pointer as it stands
         self.db.execute("INSERT INTO pointers(pointer,stale,roots,checked_at,entries) VALUES(?,?,?,strftime('%s','now'),?) "
                         "ON CONFLICT(pointer) DO UPDATE SET stale=CASE WHEN pointers.stale=2 THEN 2 ELSE excluded.stale END, "
                         "roots=excluded.roots, checked_at=excluded.checked_at, "
@@ -676,6 +688,16 @@ class FileIndex:
                     f"WHERE f.path IN ({q})", chunk):
                 out.append((ptr, path, {**(json.loads(tj) if tj else {}), "pass": True, "sha256": sha},
                             json.loads(ij) if ij else None, json.loads(pj) if pj else None))
+        return out
+
+    def held_candidates(self, pointers) -> list:
+        """[(pointer, path, entry)] of files that match their review but hold secret-shaped text (`seen` as held): never
+        searched, only named as held. Their flag was set once per sha by the updater."""
+        out = []
+        for ptr in pointers:
+            for path, sha in self.db.execute(
+                    "SELECT path,reviewed_sha FROM seen WHERE pointer=? AND reason='held' AND reviewed_sha IS NOT NULL ORDER BY path", (ptr,)):
+                out.append((ptr, path, {"pass": True, "sha256": sha}))
         return out
 
     def edited_candidates(self, pointers) -> list:
