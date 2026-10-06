@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A background refresh no longer sends each file to the paid judge twice. When a combined content check (gate pack) fails it is retried as its two halves before any per-file call, and the per-file fallback sends the description and label claims in one call (11 files after a failed pack: 6 calls, was 24). A payment refusal (HTTP 402, an empty judge balance) stops the refresh at once with "top up, then refresh again": no split, no per-file retries, nothing written, so the set stays stale. Test: `skills/super-jev/tests/test_gate_pack.py`.
+
 - A file the secret scan holds no longer leaves its words in the local stores: the word index entry keeps `"secret": true` and no words, and the pointer word list skips the file, so a key-shaped token from such a file is never written to `word-index.json` or `pointer-words.json`. Files written earlier are cleaned on first load with no re-read and no re-index: `pointer-words.json` entries saved before `WORDS_VERSION` 4 are dropped and the file rewritten, and `word-index.json` items flagged secret have their words emptied and the file saved once. The word index version stamp is unchanged, so an upgrade does not re-index every file. Search ranking is unchanged (a held file was already skipped). Tests: `skills/super-jev/tests/test_word_index.py`.
 - A failure to remove `index-fail.stamp` after a successful index pass no longer turns that pass into an exception.
 - The index's table-of-contents label row is built by one helper for seeding and for the label compare, so editing one alone cannot make every pass rewrite every file's row. Test: `skills/super-jev/tests/test_file_index.py`. The folder-link walk test now sets its own home folder, so it no longer depends on where the temp folder lives.
