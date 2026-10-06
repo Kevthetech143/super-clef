@@ -177,6 +177,7 @@ import contextlib
 import difflib
 import hashlib
 import io
+import itertools
 import math
 import json
 import os
@@ -2972,6 +2973,7 @@ def copy_kind(path: str):
 # self ...); that line lets "my dad" find the folder. The folder is the PROFILE's own one, or the one above it
 # when the PROFILE's first heading names that one ("# Nora" at nora/medical/PROFILE.md: nora/ holds her records).
 RELATION_LINE = re.compile(r"[\s*_>-]*relation\s*:")
+PROFILE_HEAD_LINES = 80  # only a PROFILE's head is read: its heading and Relation line live there
 RELATIONS = {"dad": "father", "father": "father", "mom": "mother", "mum": "mother", "mother": "mother",
              "wife": "wife", "husband": "husband", "daughter": "daughter", "son": "son",
              "sister": "sister", "brother": "brother", "self": "self",
@@ -2989,14 +2991,16 @@ def _profile_home(path: str):
     if p.stem.lower() != "profile":
         return None
     try:
-        lines = p.read_text(errors="replace").lower().splitlines()
+        with open(p, errors="replace") as f:
+            lines = [ln.lower() for ln in itertools.islice(f, PROFILE_HEAD_LINES)]
     except OSError:
         return None
     rel = next((ln for ln in lines if RELATION_LINE.match(ln)), None)
     if rel is None:
         return None
     heading = set(words(next((ln for ln in lines if ln.startswith("#")), "")))
-    home = next((d for d in (p.parent.parent, p.parent) if words(d.name) and set(words(d.name)) <= heading), p.parent)
+    # its own folder first; the one above only when the heading names it and not the own folder
+    home = next((d for d in (p.parent, p.parent.parent) if words(d.name) and set(words(d.name)) <= heading), p.parent)
     return str(home), home.name.lower(), {RELATIONS[w] for w in re.findall(r"[a-z]+", rel) if w in RELATIONS}
 
 PROFILE_NAMES = ("PROFILE.md", "profile.md")

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Person folders work in any layout.** A person folder is any connected folder whose PROFILE file has a `Relation:` line (it was only the fleet path `documents/<name>/`, so another layout had no people and "my dad" filtered nothing). The folder is the PROFILE's own one, or the one above it when the PROFILE's first heading names it. A PROFILE on disk beside connected files but not connected itself still counts (only its heading and Relation line are read, locally). The index rewrites only the rows whose person moved (no version bump). Tests: `skills/super-jev/tests/test_kin_word.py`.
+- **Person folders work in any layout.** A person folder is any connected folder whose PROFILE file has a `Relation:` line (it was only the fleet path `documents/<name>/`, so another layout had no people and "my dad" filtered nothing). The folder is the PROFILE's own one, or the one above it when the PROFILE's first heading names that one and not its own; only the PROFILE's first 80 lines are read. A PROFILE on disk beside connected files but not connected itself still counts (only its heading and Relation line are read, locally). The index rewrites only the rows whose person moved (no version bump). Tests: `skills/super-jev/tests/test_kin_word.py`.
 - Test fix: the "Jev refuses to fetch a body with a secret anywhere in it" test now pins its judge profile to typesafe-jev, so it passes on any system regardless of the environment-selected default judge.
 
 ## 0.3.3 — 2026-10-05

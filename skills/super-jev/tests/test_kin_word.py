@@ -111,3 +111,29 @@ def test_a_profile_on_disk_but_not_connected_still_makes_a_person(tmp_path, monk
     stages = json.loads((sdir / "traces.jsonl").read_text().splitlines()[-1])["stages"]
     assert stages["person"]["who"] == ["sam"]
     assert (stages.get("index") or {}).get("fts", {}).get("used", False) is fts
+
+
+def test_heading_naming_the_folder_above_keeps_the_own_folder(tmp_path, monkeypatch, capsys):
+    root, names, sdir = family(tmp_path, monkeypatch)
+    cdir = ask.prepare_bulk.CACHE_DIR
+    cache = json.loads((cdir / "p0.json").read_text())
+    files = {"people/lena/PROFILE.md": "# Lena, people I know\n- Relation: sister\n",  # names her folder and the one above
+             "people/lena/visits.md": "# Visits\nLena has an open referral.\n",
+             "people/otto/notes.md": "# Notes\nOtto has an open bill.\n"}  # no PROFILE: no one's folder
+    for rel, text in files.items():
+        f = root / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text)
+        cache[str(f)] = {"sha256": hashlib.sha256(f.read_bytes()).hexdigest(), "pass": True, "description": f.name, "question": ""}
+    (cdir / "p0.json").write_text(json.dumps(cache))
+    homes = ask.person_homes(names)
+    assert homes[str(root / "people/lena")] == ("lena", {"sister"}) and str(root / "people") not in homes
+    assert ask.person_of(str(root / "people/otto/notes.md"), homes) is None
+    sync(sdir)  # the index pass
+    idx = FileIndex(PRINCIPAL, sdir / "index.sqlite")
+    person = dict(idx.db.execute("SELECT path,person FROM fts_map"))
+    idx.close()
+    assert person[str(root / "people/lena/visits.md")] == "lena" and person[str(root / "people/otto/notes.md")] == ""
+    flag(monkeypatch, True)  # the ask
+    ask_it("what is still open for my sister?", sdir, capsys)
+    assert json.loads((sdir / "traces.jsonl").read_text().splitlines()[-1])["stages"]["person"]["who"] == ["lena"]
