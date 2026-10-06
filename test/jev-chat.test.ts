@@ -357,11 +357,15 @@ test('I2b first run, unprepared set: says to connect a folder, not "Couldn\'t se
   assert.doesNotMatch(s, /Couldn't search|was not refreshed|import-state|Super ?Jev/i);
 });
 
-test('I3 needs include: a file held for a secret at query time shows the engine\'s own words and way in', () => {
-  const s = R('ask', { outcome: 'needs-setup', why: 'no match, but the search was incomplete: 1 file held (contains a secret; not sent)', next: 'include',
+test('I3 absent + held: Not in your notes plus the left-out lines, never Not sure yet (engine exit 1)', () => {
+  const s = R('ask', { outcome: 'not-found', why: 'searched 1 set, no matching file (it may still exist); partial: 1 file not checked (1 file held (contains a secret; not sent); see ask.py --status)', next: 'include',
+    searched: { sets: 1, notes: 12 },
     left_out: [{ what: 'held back: it looks like it holds a password, key or card number', count: 1, where: '/Users/sam/Team Notes/ops', way_in: 'remove or move the flagged value, then re-run setup' }] });
+  assert.match(s, /^• Not in your notes/m);
+  assert.doesNotMatch(s, /Not sure yet/);
   assert.ok(s.includes('held back'));
   assert.ok(s.replace(/\s+/g, ' ').includes('remove or move the flagged value, then re-run setup'));
+  assert.match(s, /Next: .*way in above/);
 });
 
 test('I3b not-found with files skipped at setup still names them, with their way in', () => {

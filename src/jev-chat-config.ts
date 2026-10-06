@@ -315,8 +315,7 @@ export function render(shown: Shown, look: Look): string {
       for (const u of rows) body(`${u.root ? basename(u.root) : u.set} ${u.healing ? 'changed; it is refreshing now. Ask again in a moment.' : 'was not refreshed, so it was not searched.'}`);
       leftOut(d.left_out);
       if (!rows.length && !(d.left_out ?? []).length && d.why) body(d.why);
-      if (d.next === 'include') next('use the way in above, then ask again.');
-      else if (rows.some((u) => !u.healing)) drag('drag the folder in again to refresh it.', 'run superclef connect <folder> again to refresh it.');
+      if (rows.some((u) => !u.healing)) drag('drag the folder in again to refresh it.', 'run superclef connect <folder> again to refresh it.');
     }
   } else if (o === 'not-supported') {
     head('Not answered'); body(d.why ?? '');
@@ -358,7 +357,8 @@ export function render(shown: Shown, look: Look): string {
     if (d.searched) body(`Searched ${plural(d.searched.sets, 'folder')} (${plural(d.searched.notes, 'note')}); nothing matched.`);
     body("That doesn't prove it's nowhere: it may be in a folder you haven't connected.");
     leftOut(d.left_out);
-    drag('drag in the folder that has it.', 'run superclef connect <folder that has it>.');
+    if (d.next === 'include') next('use the way in above, then ask again.');
+    else drag('drag in the folder that has it.', 'run superclef connect <folder that has it>.');
   } else crash(d.why ?? '');
   if (d.skills_off && shown.kind !== 'status') body(sentence(d.skills_off).replace(/^./, (c) => c.toUpperCase()));
   const time = shown.secs === undefined ? [] : [paint('dim', `· ${shown.secs.toFixed(1)}s`)];
