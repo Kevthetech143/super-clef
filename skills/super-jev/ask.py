@@ -2275,6 +2275,11 @@ def index_fts_pass(idx, pointers: list, widx: dict, toc) -> int:
     edited = {p for _ptr, p, _e in idx.edited_candidates(pointers)}
     cands = index_candidates(idx, pointers)
     homes = person_homes(pointers, [c[1] for c in cands] + idx.person_paths(pointers))  # the ask reads the same PROFILEs
+    listed, by_ptr = {c[1] for c in cands}, {}
+    for ptr, path, _e in cands:
+        by_ptr.setdefault(ptr, []).append(path)
+    # a PROFILE on disk but not connected: kept for the ask, which reads only the index's PROFILE rows
+    unlisted = {ptr: x for ptr, ps in by_ptr.items() if (x := [f for f in profile_paths(ps) if f not in listed])}
     for ptr, path, entry in cands:
         if path in edited:
             continue
@@ -2303,7 +2308,7 @@ def index_fts_pass(idx, pointers: list, widx: dict, toc) -> int:
     for path in set(have) - keep:
         idx.fts_drop(path)
         wrote += 1
-    idx.fts_finish(WORD_INDEX_VERSION, unfinished)
+    idx.fts_finish(WORD_INDEX_VERSION, unfinished, unlisted)
     return wrote
 
 def _fts_q(tokens) -> str:
@@ -2994,13 +2999,29 @@ def _profile_home(path: str):
     home = next((d for d in (p.parent.parent, p.parent) if words(d.name) and set(words(d.name)) <= heading), p.parent)
     return str(home), home.name.lower(), {RELATIONS[w] for w in re.findall(r"[a-z]+", rel) if w in RELATIONS}
 
+PROFILE_NAMES = ("PROFILE.md", "profile.md")
+
+def profile_paths(paths) -> list:
+    """The PROFILE files among `paths`, plus a PROFILE file on disk in a folder holding one of them: a PROFILE left
+    out of the connected files still makes its folder a person folder (only its heading and Relation line are read,
+    locally; nothing of it is indexed or sent)."""
+    out, dirs = [], set()
+    for p in paths:
+        if Path(p).stem.lower() == "profile":
+            out.append(p)
+        dirs.add(os.path.dirname(p))
+    have = {os.path.dirname(p) for p in out}
+    for d in sorted(dirs - have):
+        out += [f for n in PROFILE_NAMES if os.path.isfile(f := os.path.join(d, n))][:1]
+    return out
+
 def person_homes(pointers: list, paths=None) -> dict:
     """{person folder: (name, relation words)}. `paths`: the PROFILE files already listed by the file index (the
     flag-on FTS path), instead of every connected file's prepare-cache."""
     out, seen = {}, set()
     for group in ([load_cache_files(p) for p in pointers] if paths is None else [paths]):
-        for path in group:
-            if path in seen or Path(path).stem.lower() != "profile":
+        for path in profile_paths(group):
+            if path in seen:
                 continue
             seen.add(path)
             if home := _profile_home(path):

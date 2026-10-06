@@ -528,8 +528,10 @@ class FileIndex:
         if toc_json is not None:
             self.db.execute("INSERT INTO tocpage VALUES(?,?,?)", (path, sha, toc_json))
 
-    def fts_finish(self, version: str, unfinished=()) -> None:
-        """The pass is over: every pointer but `unfinished` (a file whose bytes changed under the updater) is ready again."""
+    def fts_finish(self, version: str, unfinished=(), profiles=None) -> None:
+        """The pass is over: every pointer but `unfinished` (a file whose bytes changed under the updater) is ready again.
+        `profiles`: {pointer: PROFILE files on disk beside its files but not connected} (they make person folders)."""
+        self.db.execute("INSERT OR REPLACE INTO meta VALUES('person_profiles',?)", (json.dumps(profiles or {}),))
         self.db.execute("DELETE FROM fts_pending" + (f" WHERE pointer NOT IN ({','.join('?' * len(unfinished))})" if unfinished else ""),
                         list(unfinished))
         self.db.execute("DELETE FROM fts_stats")
@@ -626,7 +628,9 @@ class FileIndex:
             f"SELECT path FROM seen WHERE pointer IN ({q}) AND path LIKE '%/profile.%'", list(pointers))]
         for ptr, who in self.db.execute(f"SELECT pointer,person FROM fts_stats WHERE pointer IN ({q}) AND person!=''", list(pointers)).fetchall():
             out += [r[0] for r in self.db.execute("SELECT path FROM fts_map WHERE pointer=? AND person=? AND path LIKE '%/profile.%'", (ptr, who))]
-        return out
+        r = self.db.execute("SELECT v FROM meta WHERE k='person_profiles'").fetchone()
+        unlisted = json.loads(r[0]) if r else {}
+        return out + [f for ptr in pointers for f in unlisted.get(ptr, [])]
 
     def fts_rows(self, paths) -> list:
         """[(pointer, path, entry, item, tocrow)] for these indexed paths: entry shaped like candidates()'s."""

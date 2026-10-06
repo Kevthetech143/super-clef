@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Person folders work in any layout.** A person folder is any connected folder whose PROFILE file has a `Relation:` line (it was only the fleet path `documents/<name>/`, so another layout had no people and "my dad" filtered nothing). The folder is the PROFILE's own one, or the one above it when the PROFILE's first heading names it. A PROFILE on disk beside connected files but not connected itself still counts (only its heading and Relation line are read, locally). The index rewrites only the rows whose person moved (no version bump). Tests: `skills/super-jev/tests/test_kin_word.py`.
+
 ## 0.3.3 — 2026-10-05
 
 - **Clef's free table-of-contents shortlist finds files named for the topic.** With the clef judge the TOC pick is free word work (no judge call): a question word in the file's own name now counts twice, so a file whose name carries the question's words but whose text uses other words reaches the TOC slots (the word search's three best hits still come first). The files clef did not pick now keep the read order (word hits, then the TOC shortlist) instead of reverse path order, the rule a dead judge already used. Jev's pick is unchanged. A clef judge pick over the TOC pages was tried and measured: no gain on held-out questions, about 10 s more per ask, so it is not shipped.

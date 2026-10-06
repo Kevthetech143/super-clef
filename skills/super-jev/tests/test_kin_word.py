@@ -86,3 +86,28 @@ def test_index_moves_the_person_without_a_version_bump(tmp_path, monkeypatch):
     idx = FileIndex(PRINCIPAL, sdir / "index.sqlite")
     assert person()[str(root / NORA)] == "nora" and person()[str(root / DADS)] == "gustavo"
     assert idx.fts_usable(ask.WORD_INDEX_VERSION)[0]
+
+
+@pytest.mark.parametrize("fts", [False, True])
+def test_a_profile_on_disk_but_not_connected_still_makes_a_person(tmp_path, monkeypatch, capsys, fts):
+    root, names, sdir = family(tmp_path, monkeypatch)
+    (root / "family/sam").mkdir()
+    (root / "family/sam/PROFILE.md").write_text("# Sam\n- Relation: brother\n")  # on disk, not in the prepare-cache
+    note = root / "family/sam/visits.md"
+    note.write_text("# Visits\nSam has an open referral.\n")
+    cdir = ask.prepare_bulk.CACHE_DIR
+    cache = json.loads((cdir / "p0.json").read_text())
+    cache[str(note)] = {"sha256": hashlib.sha256(note.read_bytes()).hexdigest(), "pass": True, "description": "visits", "question": ""}
+    (cdir / "p0.json").write_text(json.dumps(cache))
+    assert ask.people(names)["sam"] == {"brother"}
+    if fts:
+        sync(sdir)
+        idx = FileIndex(PRINCIPAL, sdir / "index.sqlite")
+        assert str(root / "family/sam/PROFILE.md") not in dict(idx.db.execute("SELECT path,person FROM fts_map"))
+        assert dict(idx.db.execute("SELECT path,person FROM fts_map"))[str(note)] == "sam"
+        idx.close()
+    flag(monkeypatch, fts)
+    ask_it("what is still open for my brother?", sdir, capsys)
+    stages = json.loads((sdir / "traces.jsonl").read_text().splitlines()[-1])["stages"]
+    assert stages["person"]["who"] == ["sam"]
+    assert (stages.get("index") or {}).get("fts", {}).get("used", False) is fts
