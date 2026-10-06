@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `prepare_bulk.py --json` no longer reports a payment refusal as "internal error: PaymentRequired" with a traceback; it prints the same single payment message as text mode and the same JSON result object, exit code unchanged. Test: `skills/super-jev/tests/test_json_unpaid.py`.
+
 - A background refresh no longer sends each file to the paid judge twice. When a combined content check (gate pack) fails it is retried as its two halves before any per-file call, and the per-file fallback sends the description and label claims in one call (11 files after a failed pack: 6 calls, was 24). A payment refusal (HTTP 402, an empty judge balance) stops the refresh at once with "top up, then refresh again": no split, no per-file retries, nothing written, so the set stays stale. Test: `skills/super-jev/tests/test_gate_pack.py`.
 
 - A refresh no longer stops with a false "payment required" when a file's description mentions `HTTP 402`. The checked connect searched all of the judge call's output for `HTTP 402`, and that output echoes the full command including every claim, so a normal verdict looked like a payment refusal. It now ignores the echoed command line and the verdict rows, which are the only places claim text appears. Stdout and stderr are also joined with a newline, so a stdout that ends without one cannot glue stderr onto the echo line. Test: `skills/super-jev/tests/test_connect_checked.py`.
