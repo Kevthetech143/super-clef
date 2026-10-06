@@ -48,12 +48,12 @@ def test_a_question_word_in_the_file_name_lifts_it_into_the_free_slots(monkeypat
     assert files[3] == GOLD and trace["pick"]["calls"] == 0
 
 
-def test_the_files_clef_did_not_pick_keep_the_read_order_not_path_order(tmp_path, monkeypatch, capsys):
+def test_the_files_clef_did_not_pick_follow_the_package_order_not_path_order(tmp_path, monkeypatch, capsys):
     import json
     import ask
     notes = {"a.md": "The orchid greenhouse opens at 9am.", "b.md": "Greenhouse supply order: pots, bark, moss.",
              "z.md": "The orchid greenhouse gate is green."}
-    read = ["a.md", "b.md", "z.md"]  # path order would list z.md before a.md
+    read = ["a.md", "b.md", "z.md"]  # z.md holds more question words, so it sits ahead of a.md in the package
     q = "what is the orchid greenhouse gate code"
     files = {}
     for name, text in notes.items():
@@ -87,4 +87,4 @@ def test_the_files_clef_did_not_pick_keep_the_read_order_not_path_order(tmp_path
     capsys.readouterr()
     rec = next(json.loads(ln) for ln in reversed((sdir / "lookups.jsonl").read_text().splitlines())
                if json.loads(ln).get("kind") == "lookup")
-    assert [Path(t["path"]).name for t in rec["top"]] == ["b.md", "a.md", "z.md"]
+    assert [Path(t["path"]).name for t in rec["top"]] == ["b.md", "z.md", "a.md"]

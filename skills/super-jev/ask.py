@@ -2756,7 +2756,6 @@ def clef_confirm(question: str, paths: list):
         return {}, set(), None, notes  # a claim is judged by judge_listwise's verdicts, over its own short package
     # Free local rerank first: the files whose best 120-token stretch holds the most question words go in the package.
     shown = sorted((p for p in paths if p in passages), key=lambda p: -window_hits[p])[:CLEF_PACKAGE_FILES]
-    _CLEF["shown"] = shown
     for p in paths:
         notes.setdefault(p, INCONCLUSIVE)
     if not shown:
@@ -2777,6 +2776,7 @@ def clef_confirm(question: str, paths: list):
         if isinstance(e, judges.Unreachable):
             _STAGE["judge_unreachable"] = True
         return {}, set(), f"clef judge gave no verdict: {str(e)[:160]}", notes
+    _CLEF["shown"] = shown  # only once the judge answered: a dead judge keeps the read-list order
     _STAGE["clef"] = {"pick": choice, "prob": prob, "files": [Path(p).name for p in shown], "secs": round(time.time() - t0, 1),
                       "input_tokens": r.get("input_tokens"), "judge_secs": r.get("secs")}
     m = re.fullmatch(r"file_(\d+)", str(choice))
