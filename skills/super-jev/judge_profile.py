@@ -72,6 +72,11 @@ class JudgeProfile:
     #: a judge's "none" at or above this probability, with no file confirmed, is a clean not-found (the leads are
     #: not listed); 0 = off (the leans-none note and the leads stay). Measured per judge, so only clef sets it.
     none_bar: float = 0.0
+    #: per-file yes/no verdicts asked in the same clef call: a file whose yes is at or above file_yes_bar is kept
+    #: (ranked by its pick probability), one under it is listed after the kept ones; a "none" whose best file yes
+    #: is under none_file_bar is a clean not-found too. 0 = off. Measured per judge, so only clef sets them.
+    file_yes_bar: float = 0.0
+    none_file_bar: float = 0.0
 
     @property
     def input_cap_tokens(self):
@@ -152,11 +157,12 @@ def load(name=None, path=None):
         if not isinstance(p["calibrated"], bool):
             raise SystemExit(f"super-jev: cannot read the judge limits table {Path(path).name}: calibrated must be true or false")
         opt["calibrated"] = p["calibrated"]
-    if "none_bar" in p:
-        try:
-            opt["none_bar"] = float(p["none_bar"])
-        except (ValueError, TypeError) as e:
-            raise SystemExit(f"super-jev: cannot read the judge limits table {Path(path).name}: {e!r}")
+    for f in ("none_bar", "file_yes_bar", "none_file_bar"):
+        if f in p:
+            try:
+                opt[f] = float(p[f])
+            except (ValueError, TypeError) as e:
+                raise SystemExit(f"super-jev: cannot read the judge limits table {Path(path).name}: {e!r}")
     if "confidence_field" in p:
         opt["confidence_field"] = str(p["confidence_field"])
     opt["judge_name"] = opt.get("judge_name") or key

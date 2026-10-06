@@ -29,11 +29,12 @@ NOTES = {
 Q = "what is the orchid greenhouse gate code"
 
 
-def _reply(choice, prob):
+def _reply(choice, prob, yes=()):
     others = [c for c in ("file_1", "file_2", "file_3", "none") if c != choice]
     probs = {choice: prob, **{o: round((1 - prob) / len(others), 4) for o in others}}
-    return {"answers": {"pick": {"type": "choice", "choice": choice, "confidence": prob, "probabilities": probs}},
-            "model": "clef-flash", "usage": {"input_tokens": 600}}
+    answers = {"pick": {"type": "choice", "choice": choice, "confidence": prob, "probabilities": probs}}
+    answers.update({f"ok_file_{i + 1}": {"type": "noul", "noul": v} for i, v in enumerate(yes)})
+    return {"answers": answers, "model": "clef-flash", "usage": {"input_tokens": 600}}
 
 
 def _run(tmp_path, monkeypatch, capsys, reply, profile=CLEF):
@@ -47,8 +48,9 @@ def _run(tmp_path, monkeypatch, capsys, reply, profile=CLEF):
     (cache / "p1.json").write_text("{}")
     monkeypatch.setattr(ask.prepare_bulk, "CACHE_DIR", cache)
     monkeypatch.setattr(ask, "CLEF", True)
+    monkeypatch.setattr(ask, "CLEF_VERDICTS", True)
     monkeypatch.setattr(judges, "profile", lambda: profile)
-    ask._CLEF.update(low_trust=set(), leans_none=False, strong_none=False)
+    ask._CLEF.update(low_trust=set(), leans_none=False, strong_none=False, rank={})
     ask._STAGE.clear()
     monkeypatch.setattr(ask, "load_cache_files", lambda ptr: {})
     monkeypatch.setattr(ask, "word_search", lambda *a, **k: [])
@@ -110,3 +112,19 @@ def test_with_the_bar_off_a_strong_none_still_keeps_the_leads(tmp_path, monkeypa
 def test_a_failed_call_is_never_a_not_found(tmp_path, monkeypatch, capsys):
     top, _ = _run(tmp_path, monkeypatch, capsys, {"answers": {}})  # no pick in the reply
     assert ask._CLEF["strong_none"] is False
+
+
+def test_a_strong_none_wins_over_yes_verdicts(tmp_path, monkeypatch, capsys):
+    top, out = _run(tmp_path, monkeypatch, capsys, _reply("none", 0.96, yes=(0.9, 0.9, 0.9)))
+    assert top == [] and out.startswith("OUTCOME: no")
+
+
+def test_a_weak_none_with_every_file_no_is_a_clean_not_found(tmp_path, monkeypatch, capsys):
+    top, out = _run(tmp_path, monkeypatch, capsys, _reply("none", 0.57, yes=(0.05, 0.1, 0.19)))
+    assert top == [] and "leans none" not in out
+    assert ask._CLEF["strong_none"] is True
+
+
+def test_a_weak_none_with_a_file_at_the_bar_keeps_the_leads(tmp_path, monkeypatch, capsys):
+    top, out = _run(tmp_path, monkeypatch, capsys, _reply("none", 0.57, yes=(0.05, 0.2, 0.1)))
+    assert len(top) == 3 and "leans none of these" in out

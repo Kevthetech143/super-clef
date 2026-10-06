@@ -871,7 +871,10 @@ CLEF_NOTE = "  (not confirmed: on topic, but clef did not pick this file; read i
 CLEF_CLAIM_NOTE = "(Clef is the judge: treat this as a lead; open the proof file to confirm.)"
 CLEF_VIEW_WHAT = "not searched by Super Clef: a reviewed view of de-identified copies, which needs Super Jev's provider"
 CLEF_VIEW_FIX = "ask Super Jev for these files"
-_CLEF = {"low_trust": set(), "leans_none": False, "strong_none": False}
+_CLEF = {"low_trust": set(), "leans_none": False, "strong_none": False, "rank": {}}
+# A/B flag: the clef call also asks one yes/no per file in the package (same call, same forward pass).
+CLEF_VERDICTS = os.environ.get("SUPERCLEF_CLEF_VERDICTS") == "1"
+CLEF_VERDICT_ASK = "Does %s state the answer to the question?"
 # Word search: on every lookup the
 # principal's reviewed files (prepare-cache entries whose sha256 still matches) are
 # searched locally for the question's words (typo-tolerant), and the best
@@ -2828,6 +2831,8 @@ def clef_confirm(question: str, paths: list):
     crit = {f"file_{i + 1}": f"{Path(p).name} answers the question" for i, p in enumerate(shown)}
     crit[LISTWISE_NONE] = "none of the files states the answer to the question"
     qs = {"pick": {"type": "choice", "instructions": LISTWISE_INSTRUCTIONS % question, "criteria": crit}}
+    if CLEF_VERDICTS:
+        qs.update({f"ok_{k}": {"type": "noul", "instructions": CLEF_VERDICT_ASK % k} for k in state})
     t0 = time.time()
     try:
         r = judges.ask(state, qs, timeout=120)
@@ -2835,6 +2840,9 @@ def clef_confirm(question: str, paths: list):
         choice = pick["choice"]
         probs = pick.get("probabilities")
         prob = probs.get(choice) if isinstance(probs, dict) else pick.get("probability")
+        # yes per shown file; a reply missing any verdict is read as the pick alone
+        yes = [(r["answers"].get(f"ok_{k}") or {}).get("noul") for k in state] if CLEF_VERDICTS else []
+        yes = yes if yes and all(isinstance(v, (int, float)) for v in yes) else None
     except (judges.JudgeError, KeyError, TypeError, AttributeError) as e:
         _STAGE["clef"] = {"error": f"{type(e).__name__}: {str(e)[:160]}", "secs": round(time.time() - t0, 1)}
         if isinstance(e, judges.Unreachable):
@@ -2842,6 +2850,8 @@ def clef_confirm(question: str, paths: list):
         return {}, set(), f"clef judge gave no verdict: {str(e)[:160]}", notes
     _STAGE["clef"] = {"pick": choice, "prob": prob, "files": [Path(p).name for p in shown], "secs": round(time.time() - t0, 1),
                       "input_tokens": r.get("input_tokens"), "judge_secs": r.get("secs")}
+    if yes:
+        _STAGE["clef"]["yes"] = [round(v, 4) for v in yes]
     m = re.fullmatch(r"file_(\d+)", str(choice))
     if choice == LISTWISE_NONE or not m or not 1 <= int(m.group(1)) <= len(shown):
         _CLEF["leans_none"] = True
@@ -2850,7 +2860,25 @@ def clef_confirm(question: str, paths: list):
         bar = judges.profile().none_bar
         if choice == LISTWISE_NONE and bar and isinstance(prob, (int, float)) and prob >= bar:
             _CLEF["strong_none"] = True
-        return {}, set(), None, notes
+        # A weaker none is clean too when no file's own verdict comes near a yes (none_file_bar).
+        elif choice == LISTWISE_NONE and yes and max(yes) < judges.profile().none_file_bar:
+            _CLEF["strong_none"] = True
+        if _CLEF["strong_none"] or not yes:
+            return {}, set(), None, notes
+    if yes:
+        # The verdicts gate, the pick ranks: files with yes at or above file_yes_bar are kept, by pick probability;
+        # the rest (the pick too, when its own verdict is no) stay listed after them, unconfirmed.
+        probs = probs if isinstance(probs, dict) else {}
+        kept = [(p, probs.get(f"file_{i + 1}")) for i, p in enumerate(shown) if yes[i] >= judges.profile().file_yes_bar]
+        out = {}
+        for p, pp in kept:
+            pp = pp if isinstance(pp, (int, float)) else 0.0
+            del notes[p]
+            _CLEF["rank"][p] = pp
+            if pp < CLEF_TRUST_MIN or pp < SOURCE_FLOOR:
+                _CLEF["low_trust"].add(p)
+            out[p] = min(1.0, max(pp, SOURCE_FLOOR))
+        return out, set(), None, notes
     p = shown[int(m.group(1)) - 1]
     del notes[p]
     prob = prob if isinstance(prob, (int, float)) else 0.0
@@ -3229,7 +3257,7 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
     t0 = time.time()
     lookup_id = new_lookup_id(principal, question, t0)
     _STAGE.clear()
-    _CLEF.update(low_trust=set(), leans_none=False, strong_none=False)
+    _CLEF.update(low_trust=set(), leans_none=False, strong_none=False, rank={})
     # SUPERJEV_REPLAY=1 (paid_replay.py): answer live; never read a saved answer or claim verdict.
     replay = os.environ.get("SUPERJEV_REPLAY") == "1"
     panel = None
@@ -3770,8 +3798,8 @@ def _lookup(question: str, principal: str, sdir: Path) -> int:
             # Clef ranks one file at most: the files it did not pick keep the read list's order (word search's best
             # hits, then the TOC pick's), not path order; a dead judge ranks nothing, so all of them keep it.
             order = {p: i for i, p in enumerate(to_check)}
-            merged.sort(key=lambda m: (not check_error and notes.get(m[1]) != INCONCLUSIVE, -order.get(m[1], len(order))),
-                        reverse=True)
+            merged.sort(key=lambda m: (not check_error and notes.get(m[1]) != INCONCLUSIVE, _CLEF["rank"].get(m[1], 0),
+                                       -order.get(m[1], len(order))), reverse=True)
         if CLEF:
             possible.update({p: POSSIBLE_NOTE for p in _CLEF["low_trust"] if p in keep})
             if _CLEF["strong_none"]:
