@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Jev } from '../src/jev.ts';
+import { loadJudgeProfile } from '../src/judge-profile.ts';
 import { hasSecret, payloadHasSecret } from '../src/secret-scan.ts';
 
 const request = (text: string) => ({
@@ -10,7 +11,7 @@ const request = (text: string) => ({
 
 test('Jev refuses to fetch a body with a secret anywhere in it (0 sends)', async () => {
   let sends = 0;
-  const jev = new Jev({ apiKey: 'fake', fetch: (async () => { sends++; return new Response('{}', { status: 500 }); }) as any });
+  const jev = new Jev({ apiKey: 'fake', profile: loadJudgeProfile('typesafe-jev'), fetch: (async () => { sends++; return new Response('{}', { status: 500 }); }) as any });
   for (const text of ['api_key = sk-live-9fQ2xZ7pL0aBcD3eF4', 'card 4000 0566 5566 5556', 'ghp_' + 'a1'.repeat(18)]) {
     await assert.rejects(jev.evaluate(request(text), new AbortController().signal), /contains a secret; not sent/);
   }
