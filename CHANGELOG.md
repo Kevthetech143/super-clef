@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A background refresh no longer sends each file to the paid judge twice. When a combined content check (gate pack) fails it is retried as its two halves before any per-file call, and the per-file fallback sends the description and label claims in one call (11 files after a failed pack: 6 calls, was 24). A payment refusal (HTTP 402, an empty judge balance) stops the refresh at once with "top up, then refresh again": no split, no per-file retries, nothing written, so the set stays stale. Test: `skills/super-jev/tests/test_gate_pack.py`.
+
+- A refresh no longer stops with a false "payment required" when a file's description mentions `HTTP 402`. The checked connect searched all of the judge call's output for `HTTP 402`, and that output echoes the full command including every claim, so a normal verdict looked like a payment refusal. It now ignores the echoed command line and the verdict rows, which are the only places claim text appears. Stdout and stderr are also joined with a newline, so a stdout that ends without one cannot glue stderr onto the echo line. Test: `skills/super-jev/tests/test_connect_checked.py`.
+
 ## 0.3.4 — 2026-10-06
 
 - A file the secret scan holds no longer leaves its words in the local stores: the word index entry keeps `"secret": true` and no words, and the pointer word list skips the file, so a key-shaped token from such a file is never written to `word-index.json` or `pointer-words.json`. Files written earlier are cleaned on first load with no re-read and no re-index: `pointer-words.json` entries saved before `WORDS_VERSION` 4 are dropped and the file rewritten, and `word-index.json` items flagged secret have their words emptied and the file saved once. The word index version stamp is unchanged, so an upgrade does not re-index every file. Search ranking is unchanged (a held file was already skipped). Tests: `skills/super-jev/tests/test_word_index.py`.
