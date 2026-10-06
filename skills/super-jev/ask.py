@@ -1894,11 +1894,25 @@ def text_can_leave(path: str, raw: bytes, text: str, sha=None) -> bool:
     return verdict
 
 
+_EDITED_MEMO = [None]  # {key: bool} while one lookup() runs, so each edited file is scanned once per ask; None outside an ask
+
+
 def edited_readable(path: str, ptr: str, entry, raw: bytes, text: str, sha=None) -> bool:
     """May a reviewed file edited since connect be read at its current text while its pointer
     waits on the refresh? Only as a refresh would admit it: reviewed at a known version and not
     failed by its last review, under the size ceiling, no secret-looking line, and still inside
     the pointer's recorded scope."""
+    memo = _EDITED_MEMO[0]
+    if memo is None:
+        return _edited_readable(path, ptr, entry, raw, text, sha)
+    e = entry if isinstance(entry, dict) else {}
+    key = (path, sha or hashlib.sha256(raw).hexdigest(), ptr, e.get("pass"), e.get("sha256"), e.get("local"))
+    if key not in memo:
+        memo[key] = _edited_readable(path, ptr, entry, raw, text, sha)
+    return memo[key]
+
+
+def _edited_readable(path: str, ptr: str, entry, raw: bytes, text: str, sha=None) -> bool:
     return (isinstance(entry, dict) and bool(entry.get("pass")) and bool(entry.get("sha256"))
             and len(raw) <= prepare_bulk.CEILING_BYTES
             and text_can_leave(path, raw, text, sha)
@@ -2055,6 +2069,7 @@ def edited_held(pointers: list, exclude=(), reads=None) -> dict:
 INDEX_FILE = "index.sqlite"
 INDEX_STAMP = "index-sync.stamp"
 INDEX_LOCK = "index-update.lock"
+INDEX_WALK_STAMP = "index-walk.stamp"  # the last root walk; the updater walks the roots at most once per auto_heal.SCAN_SECS
 INDEX_PENDING = "index-update.pending"  # touched by an updater that lost the lock
 INDEX_MAX_AGE_SECS = 24 * 3600   # an index not synced for a day is stale: today's path runs
 INDEX_SPAWN_EVERY_SECS = 600     # detached updater after an ask, at most this often (sooner on a served mismatch)
@@ -2406,7 +2421,13 @@ def _index_sync(principal: str, sdir: Path) -> int:
     try:
         hashed, expected = 0, {}
         reports = {r["pointer"]: auto_heal._report_for(r["pointer"], prepare_bulk.CACHE_DIR)[0] or {} for r in rows}
-        idx.begin_round([x for v in reports.values() for x in v.get("roots") or []])  # sets sharing a root walk it once; a root inside another is cut from its walk
+        wstamp = sdir / INDEX_WALK_STAMP
+        try:
+            walk_due = time.time() - wstamp.stat().st_mtime >= auto_heal.SCAN_SECS
+        except OSError:
+            walk_due = True
+        walked = False
+        idx.begin_round([x for v in reports.values() for x in v.get("roots") or []] if walk_due else [])  # sets sharing a root walk it once; a root inside another is cut from its walk
         views = {r["pointer"] for r in rows if r.get("viewOriginals")}
         _STAGE["view_pointers"] = sorted(views)  # Clef does not search a reviewed view: it keeps its panel row, never file rows
         served = [r for r in rows if r["pointer"] not in views]
@@ -2421,7 +2442,14 @@ def _index_sync(principal: str, sdir: Path) -> int:
             if fresh and r.get("generation") is not None and idx.generation_of(ptr) not in (None, r.get("generation")):
                 idx.purge(ptr)  # the pointer was refreshed since: re-seed it from its new prepare-cache
             roots = reports[ptr].get("roots")
-            hashed += idx.update(ptr, entries=entries, roots=roots, excludes=reports[ptr].get("excludes"))["hashed"]
+            walk = walk_due or idx.generation_of(ptr) is None  # a pointer new to the index (or just purged) is always walked
+            walked = walked or walk
+            hashed += idx.update(ptr, entries=entries, roots=roots, excludes=reports[ptr].get("excludes"), walk=walk)["hashed"]
+        if walked:
+            try:
+                wstamp.touch()
+            except OSError:
+                pass
         idx.set_panel(rows)
         idx.set_complete(expected)  # after every pointer is updated: a path shared by two pointers is held by one and counts for both
         wpath = sdir / WORD_INDEX_FILE
@@ -2449,6 +2477,7 @@ def _index_sync(principal: str, sdir: Path) -> int:
                 toc.get(path, got[1], lambda _p, raw=got[0]: clean_text(raw.decode("utf-8", "replace"), path))
         toc.save({p for _ptr, p, _e in allc})
         fts_changed = index_fts_pass(idx, [r["pointer"] for r in rows], widx, toc)
+        idx.compact()
     finally:
         idx.close()  # a stopped run drops its open transaction; what it committed stays
     print(f"index updated: {len(rows)} pointer(s), {hashed} file(s) hashed, {fts_changed} fts file(s) written")
@@ -3073,6 +3102,14 @@ def _outcome_line(o: dict) -> str:
 
 
 def lookup(question: str, principal: str, sdir: Path) -> int:
+    _EDITED_MEMO[0] = {}  # this ask only: never carried into the next one
+    try:
+        return _lookup_once(question, principal, sdir)
+    finally:
+        _EDITED_MEMO[0] = None
+
+
+def _lookup_once(question: str, principal: str, sdir: Path) -> int:
     _RESULT.clear()
     buf = io.StringIO()
     if _CLAIM["text"]:
