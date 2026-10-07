@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A newly connected pointer is indexed at once: a first connect of a pointer the registry did not hold, and an ask
 that finds a searched set "not indexed", both start the updater inside the 10-minute throttle; an unchanged re-connect
-still goes through the throttle; the connect kick stays off under a replay or pytest. Made-up state, stubs, no network.
+still goes through the throttle; the connect kick stays off under pytest, and nothing starts it in a replay. Made-up state, stubs, no network.
 
     python3 -m pytest skills/super-jev/tests/test_index_newpointer.py -q
 """
@@ -18,13 +18,15 @@ import prepare_bulk as pb  # noqa: E402
 pytestmark = pytest.mark.real_toc
 
 
-def asked(tmp_path, monkeypatch, capsys, *, new_set):
+def asked(tmp_path, monkeypatch, capsys, *, new_set, replay=False):
     """One flag-on ask over a synced corpus, stamp fresh. new_set adds a connected pointer the index never saw."""
     notes, names, sdir = build(tmp_path, monkeypatch, 40)
     Rig(monkeypatch, notes, names)
     sync(sdir)
     if new_set:
         names.append("fresh-set")
+    if replay:
+        monkeypatch.setenv("SUPERJEV_REPLAY", "1")
     spawned = []
     monkeypatch.setattr(ask, "spawn_index_updater", lambda p: spawned.append(p))
     flag(monkeypatch, True)
@@ -39,6 +41,10 @@ def test_an_ask_that_finds_a_not_indexed_set_spawns_inside_the_throttle(tmp_path
 
 def test_an_ask_with_every_set_indexed_still_respects_the_throttle(tmp_path, monkeypatch, capsys):
     assert asked(tmp_path, monkeypatch, capsys, new_set=False) == []
+
+
+def test_an_ask_under_replay_never_spawns_for_a_not_indexed_set(tmp_path, monkeypatch, capsys):
+    assert asked(tmp_path, monkeypatch, capsys, new_set=True, replay=True) == []
 
 
 def connect(tmp_path, monkeypatch, *, known_before, runs=1):

@@ -2278,7 +2278,7 @@ def index_after_ask(principal: str, sdir: Path) -> None:
     or the last start is older than INDEX_SPAWN_EVERY_SECS. One stamp file throttles it (a served-file mismatch or a
     pointer the index holds at an older generation, or not at all, skips the wait: a refresh just made it, and every ask is slow until re-seeded)."""
     st = _STAGE.get("index")
-    if not st:
+    if not st or os.environ.get("SUPERJEV_REPLAY") == "1":  # a replay's state is a throwaway copy: no background writer into it
         return
     stamp = sdir / INDEX_STAMP
     try:
