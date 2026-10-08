@@ -5,7 +5,7 @@ Every question an agent answered from a file (--approve, a confirmed pick) or re
 found elsewhere (--miss with the right file) becomes a test case: the question and the
 file that held the answer. The scorecard replays each case through word search (step 4,
 local, no Jev call) and reports where the right file ranks, and whether it made the read
-slots (the top FALLBACK_FILES). Given two builds (--ask OLD --ask NEW) it compares them
+slots (the word search's top WORD_HITS, the files every ask reads). Given two builds (--ask OLD --ask NEW) it compares them
 case by case and exits 1 if any compared build drops a case the baseline read.
 Reports tuned, held-out and retrospective cases separately; untagged and legacy
 harvested cases are retrospective. See references/scorecard-splits.md for frozen
@@ -54,6 +54,13 @@ def build_path(path: Path) -> Path:
     ask.py; grade the real code, never the launcher."""
     impl = path.with_name("ask_impl.py")
     return impl if path.name == "ask.py" and impl.is_file() else path
+
+
+def read_slots(ask) -> int:
+    """How many of the word search's files a build always reads: WORD_HITS (the zoom's safety net). A build from
+    before the zoom named the same count FALLBACK_FILES; it is read so an old baseline can still be graded."""
+    n = getattr(ask, "WORD_HITS", None)
+    return n if isinstance(n, int) else ask.FALLBACK_FILES
 
 
 def load_ask(path: Path, name: str):
@@ -290,7 +297,7 @@ def main(argv=None) -> int:
         ap.error(str(e))
     pointers = {pr: base.my_pointers(pr) for pr in a.principal}
 
-    slots = base.FALLBACK_FILES
+    slots = read_slots(base)
     ranks = [[gold_rank(m, c, pointers[c["principal"]]) for c in cases] for m in mods]
     read = lambda r: r is not None and r <= slots  # noqa: E731
     report = {"cases": len(cases), "excluded_no_gold": excluded_no_gold, "slots": slots, "builds": [str(b) for b in builds],

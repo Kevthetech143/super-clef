@@ -44,7 +44,7 @@ def _run(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(ask, "word_search", lambda *a, **k: ranked)
     monkeypatch.setattr(ask, "candidate_files", lambda *a, **k: [
         ("p1", p, {"sha256": ask.sha256_file(Path(p))}) for _s, p, _ptr in ranked])
-    monkeypatch.setattr(ask.toc_search, "run", lambda *a, **k: ([p for _s, p, _ptr in ranked], [], {}))
+    monkeypatch.setattr(ask.zoom, "run", lambda *a, **k: ([p for _s, p, _ptr in ranked], [], {}))
     monkeypatch.setattr(ask, "memory", lambda r: {"status": "miss"} if r["action"] == "cached" else
                         {"pointers": ["p1"]} if r["action"] == "panel" else {"status": "candidates", "candidates": []})
 

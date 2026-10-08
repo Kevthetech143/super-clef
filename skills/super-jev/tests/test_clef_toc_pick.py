@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Clef's free TOC shortlist and read order: a question word in a file's own name counts twice, so a file named
+"""Clef's free zoom (no judge call at any level) and read order and read order: a question word in a file's own name counts twice, so a file named
 for the topic reaches the TOC slots; and the files clef did not pick keep the read order, not path order.
 Stub judge, made-up files, no network, no clef machine.
 
@@ -15,6 +15,7 @@ sys.path[:0] = [str(SKILL), str(SKILL / "lib")]
 import judge_profile  # noqa: E402
 import judges  # noqa: E402
 import toc_search  # noqa: E402
+import zoom  # noqa: E402
 
 pytestmark = pytest.mark.real_toc  # the real TOC search, not conftest's replay
 CLEF = judge_profile.load("clef")
@@ -43,9 +44,25 @@ def test_a_question_word_in_the_file_name_lifts_it_into_the_free_slots(monkeypat
     monkeypatch.setattr(toc_search.judges, "ask", no_judge)
     corpus = {p: ("ptr", {"sha256": p, "description": ""}) for p in TEXTS}
     hits = [(3.0, "/n/d-notes.md", "ptr"), (2.0, "/n/c-notes.md", "ptr"), (1.0, "/n/b-notes.md", "ptr")]
-    files, _chosen, trace = toc_search.run(Q, corpus, hits, _ask(), judge_free=True)
+    store = zoom.MemoryStore(corpus, TEXTS.get)
+    files, _chosen, trace = zoom.run(Q, store, hits, _ask(), judge_free=True)
     assert files[:3] == [p for _s, p, _ptr in hits]  # the word search's three best hits keep the first slots
-    assert files[3] == GOLD and trace["pick"]["calls"] == 0
+    assert files[3] == GOLD and trace["pick"]["calls"] == 0 and trace["calls"] == 0
+
+
+def test_the_clef_zoom_scores_folders_without_a_judge(monkeypatch):
+    def no_judge(*a, **k):
+        raise AssertionError("the clef zoom calls no judge")
+    monkeypatch.setattr(toc_search.judges, "ask", no_judge)
+    texts = {f"/z/{d}/{k}-{d}.md": f"# {d}\nnotes\n" for d in [f"area{i}" for i in range(zoom.KEEP_FOLDERS + 3)]
+             for k in range(zoom.FOLDER_MIN_FILES)}
+    texts.update({f"/z/ferry/{k}-sched.md": "# Ferry\nleaves the dock at 7:10\n" for k in range(zoom.FOLDER_MIN_FILES)})
+    corpus = {p: ("ptr", {"sha256": p, "description": ""}) for p in texts}
+    store = zoom.MemoryStore(corpus, texts.get)
+    files, _chosen, trace = zoom.run(Q, store, [], _ask(), judge_free=True)
+    assert trace["folders"]["listed"] > zoom.KEEP_FOLDERS and trace["calls"] == 0
+    assert trace["folders"]["top"][0][0] == "/z/ferry"  # its name holds a question word: it leads the free level 1
+    assert files and all(p.startswith("/z/ferry/") for p in files[:zoom.FOLDER_MIN_FILES])
 
 
 def test_the_files_clef_did_not_pick_keep_the_read_order_not_path_order(tmp_path, monkeypatch, capsys):
@@ -72,7 +89,7 @@ def test_the_files_clef_did_not_pick_keep_the_read_order_not_path_order(tmp_path
     monkeypatch.setattr(ask, "word_search", lambda *a, **k: ranked)
     monkeypatch.setattr(ask, "candidate_files", lambda *a, **k: [
         ("p1", p, {"sha256": ask.sha256_file(Path(p))}) for _s, p, _ptr in ranked])
-    monkeypatch.setattr(ask.toc_search, "run", lambda *a, **k: ([p for _s, p, _ptr in ranked], [], {}))
+    monkeypatch.setattr(ask.zoom, "run", lambda *a, **k: ([p for _s, p, _ptr in ranked], {}, {}))
     monkeypatch.setattr(ask, "memory", lambda r: {"status": "miss"} if r["action"] == "cached" else
                         {"pointers": ["p1"]} if r["action"] == "panel" else {"status": "candidates", "candidates": []})
 
