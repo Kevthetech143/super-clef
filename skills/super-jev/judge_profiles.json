@@ -61,6 +61,7 @@
    "call_headroom": 2000,
    "overloaded_statuses": [
     429,
+    503,
     529
    ],
    "retry_attempts": 4,
@@ -99,6 +100,7 @@
    "call_headroom": 128,
    "overloaded_statuses": [
     429,
+    503,
     529
    ],
    "retry_attempts": 4,
